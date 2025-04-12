@@ -1,0 +1,893 @@
+Comm:
+
+ Welcome to the DTIFS compiler sorce-code, first example first edition.
+
+ The compiler is quite primitive and does not like a lot of things. In many cases it
+ will give an error-message but not in all. Try to stick to the styles of coding used
+ here and it will most likeley work fine for you =)
+
+ SunCode May 2005.
+
+ Note that:
+
+  	This file may not exeed the size of 32,000 bytes.
+
+  	This file may not contain more than 31 trees but less is OK, the compiler sets
+	the rest to "The Dummy Tree!". (The DTIFS tool uses max 32 trees and tree #00
+	is reserved for the "Random tree".)
+
+	All keywords are case sensitive.
+
+	All assignments must have a space on both sides of the assignment character,
+	example: "Keyword = value" is good, "Keyword=value" is no good. (The both spaces
+	and the assignment cahracter " = " are actually parts of the keyword, hard-coded.)
+
+	The "Name" must use double qoutation-marks ( " ).
+        Also: the name may not exeed the size of 15 chars.
+
+	Try to keep the postes separated by a "white char", (space or line-feed)
+	else the result is not guaranteed, (it works in most cases but looks awful =)
+
+	All keywords in the header must be there, non of them is optional.
+
+	The number of "Branches" used for the tree is a integer number, (use 2-8).
+
+	All flags "Use heights", "Global scale", "Scale by height" and "Use twist"
+	uses boolean logics, use 0 or 1 for these.
+
+	All the outher parameters are in floating point format, (it is alsoe possible
+	to use the exponent form if one likes).
+
+	If the flag "Use heights" is set to 0 (zero), then the heights are optional
+	(actually ignored if they are there anyway).
+
+	The "Stem" does not use "Height", for that the height in the header is used.
+	The height of the branches are parts of the height of the stem. Examples:
+	1.0 = top of stub, 0.5 = half way up.
+
+	If the flag "Global scale" is set to 1, then the scale given for the "Stem"
+	is used for all branches. (ignored if they are there anyway).
+
+	The flag "Scale by height" does not affect the compiler and is only used for
+	rendering the tree.
+
+	If the flag "Use twist" is set to 0 (zero) then the "Twist" angle is optional
+	(and if there, ignored by the compiler).
+
+	All branches must "Lean" and "Rotate" - no options.
+
+	All trees must have a "Stem" and at least one "Branch", (it's useless to try
+	to create a fractal from using only one attractor :)
+
+	The height of the "Stub" (in the header) must be a negative value or else
+	the tree will grow downvards, (a root system ?). This is due to a fundamental
+	error in the renderer that I have not yet fixed, (coz it does not matter much).
+
+EndComm
+
+Comm:
+
+  EXAMPLE TREES:
+
+  The first example will grow a Sierpinski-triangle tree.
+
+EndComm
+
+DTIFS:
+  Name = "Sierpinski Tree"
+  Branches = 3
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.35
+
+  Comm:
+    Above: the header, below: the stem and branches.
+  EndComm
+
+  Stem:
+    Scale = 0.5
+    Lean = 0.0
+    Rotate = 0.0
+  EndStem
+
+  Branch1:
+    Lean = 120.0
+    Rotate = 0.0
+  EndBranch1
+
+  Branch2:
+    Lean = 120.0
+    Rotate = 180.0
+  EndBranch2
+
+EndDTIFS
+
+Comm: This example tree uses all keywords possible EndComm
+DTIFS:
+  Name = "All keywords"
+  Branches = 2
+  Use heights = 1
+  Global scale = 0
+  Scale by height = 1
+  Use twist = 1
+  Radius = 0.01
+  Height = -0.18
+  Stem:
+    Scale = 0.75
+    Lean = 15.0
+    Rotate = 180.0
+    Twist = 90.0
+  EndStem
+  Branch1:
+    Height = 0.85
+    Scale = 0.85
+    Lean = 45.0
+    Rotate = 0.0
+    Twist = 90.0
+  EndBranch1
+EndDTIFS
+
+Comm: This tree shows a more compact listing. (It also takes good advantage of the "Twist" feature.) EndComm
+
+DTIFS: 
+  Name = "A Fractal Tree!" Branches = 5 Radius = 0.005 Height = -0.34
+  Use heights = 1 Global scale = 1 Scale by height = 0 Use twist = 1
+  Stem: Scale = 0.5 Twist = 90.0 Lean = 0.0 Rotate = 90.0 EndStem
+  Branch1: Height = 0.5 Twist = 180.0 Lean = 60.0 Rotate = 180.0 EndBranch1
+  Branch2: Height = 0.5 Twist = 180.0 Lean = 60.0 Rotate = 0.0 EndBranch2
+  Branch3: Height = 0.5 Twist = 180.0 Lean = 60.0 Rotate = 90.0 EndBranch3
+  Branch4: Height = 0.5 Twist = 180.0 Lean = 60.0 Rotate = 270.0 EndBranch4
+  Branch5: Height = 0.01 Twist = 0.0 Lean = 180.0 Rotate = 0.0 EndBranch5
+EndDTIFS
+
+Comm: This tree uses the most compact listing-mode I allowe :), you can write the posts unseparated, ( like this: Scale = 0.6666666Lean = 60.0Rotate = 0.0 ) but this makes the code more than hard to read. It is recomended to use the structured-one assignment per line-mode, (used in the first examples or below) it looks best. (Even this example is way to messy for me =). EndComm
+
+DTIFS: Name = "Weird Tree!" Branches = 3 Use heights = 1 Global scale = 0 Scale by height = 0 Use twist = 0 Radius = 0.01 Height = -0.27 Stem: Scale = 0.7071068 Lean = 35.2645 Rotate = 54.7355 EndStem Branch1: Height = 0.1 Scale = 0.7071068 Lean = 35.2645 Rotate = -125.2645 EndBranch1 Branch2: Height = 0.15 Scale = 0.4 Lean = 54.7355 Rotate = 0.0 EndBranch2 EndDTIFS
+
+Comm:
+-----------------------------------------------------------------------------
+		More preset trees follows below:
+-----------------------------------------------------------------------------
+EndComm
+
+DTIFS:
+  Name = "Dragon Tree"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.01
+  Height = -0.24
+  Stem:
+    Scale = 0.7071068
+    Twist = 90.0
+    Lean = 54.7355
+    Rotate = 54.7355
+  EndStem
+  Branch1:
+    Twist = -90.0
+    Lean = 54.7355
+    Rotate = -125.2645
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Sierps Tetra"
+  Branches = 4
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.35
+  Stem:
+    Scale = 0.5
+    Lean = 0.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean =  109.471 Comm: Yep! that's the proper angle to use :) EndComm
+    Rotate = 60.0
+  EndBranch1
+  Branch2:
+    Lean = 109.471
+    Rotate = 180.0
+  EndBranch2
+  Branch3:
+    Lean = 109.471
+    Rotate = -60.0
+  EndBranch3
+EndDTIFS
+
+DTIFS:
+  Name = "Sierps Octa"
+  Branches = 6
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.0015
+  Height = -0.35
+  Stem:
+    Scale = 0.5
+    Lean = 0.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean = 90.0
+    Rotate = 0.0
+  EndBranch1
+  Branch2:
+    Lean = 90.0
+    Rotate = 90.0
+  EndBranch2
+  Branch3:
+    Lean = 90.0
+    Rotate = 180.0
+  EndBranch3
+  Branch4:
+    Lean = 90.0
+    Rotate = 270.0
+  EndBranch4
+  Branch5:
+    Lean = 180.0
+    Rotate = 0.0
+  EndBranch5
+EndDTIFS
+
+DTIFS:
+  Name = "Lévy curve tree"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Lean =  54.7355
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean =  54.7355
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Lévy curve II"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.28
+  Stem:
+    Comm: Yep! this is phi - 1 or 1/phi or (-1+sqrt(5))/2 or cos((180/5)*rad)*2 EndComm
+    Scale = 0.6180339
+    Comm: Yep! this is 180/5 EndComm
+    Lean = 36.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean =  36.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Y-Tree"
+  Branches = 2
+  Use heights = 0
+  Global scale = 0
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.01
+  Height = -0.31
+  Stem:
+    Scale = 0.6666666
+    Twist = 90.0
+    Lean = -60.0
+    Rotate = 180.0
+  EndStem
+  Branch1:
+    Scale = -0.6666666
+    Twist = 90.0
+    Lean = -120.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Paratrooper!"
+  Branches = 4
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.33
+  Stem:
+    Scale = 0.57735
+    Lean =  54.7355
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean =  54.7355
+    Rotate = 90.0
+  EndBranch1
+  Branch2:
+    Lean =  54.7355
+    Rotate = 180.0
+  EndBranch2
+  Branch3:
+    Lean =  54.7355
+    Rotate = 270.0
+  EndBranch3
+EndDTIFS
+
+DTIFS:
+  Name = "Fractal antenna"
+  Branches = 4
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.48
+  Stem:
+    Scale = 0.5
+    Lean = 90.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean = 90.0
+    Rotate = 90.0
+  EndBranch1
+  Branch2:
+    Lean = 90.0
+    Rotate = 180.0
+  EndBranch2
+  Branch3:
+    Lean = 90.0
+    Rotate = 270.0
+  EndBranch3
+EndDTIFS
+
+DTIFS:
+  Name = "Pentagonic"
+  Branches = 6
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.38
+  Stem:
+    Scale = 0.4
+    Lean = 0.0
+    Rotate = 36.0
+  EndStem
+  Branch1:
+    Lean = 90.0
+    Rotate = 0.0
+  EndBranch1
+  Branch2:
+    Lean = 90.0
+    Rotate = 72.0
+  EndBranch2
+  Branch3:
+    Lean = 90.0
+    Rotate = 144.0
+  EndBranch3
+  Branch4:
+    Lean = 90.0
+    Rotate = 216.0
+  EndBranch4
+  Branch5:
+    Lean = 90.0
+    Rotate = 288.0
+  EndBranch5
+EndDTIFS
+
+DTIFS:
+  Name = "Seedy grass"
+  Branches = 2
+  Use heights = 1
+  Global scale = 0
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.0015
+  Height = -0.20
+  Stem:
+    Scale = 0.707
+    Lean = 2.0
+    Rotate = 109.471
+  EndStem
+  Branch1:
+    Height = 0.5
+    Scale = 0.6180339
+    Lean = 8.0
+    Rotate = 0.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Weedy grass"
+  Branches = 4
+  Use heights = 1
+  Global scale = 0
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.0015
+  Height = -0.20
+  Stem:
+    Scale = 0.707
+    Lean = 2.0
+    Rotate = 109.471
+    Twist = 0.0
+  EndStem
+  Branch1:
+    Height = 0.5
+    Scale = 0.618
+    Lean = 8.0
+    Rotate = 54.673
+    Twist = 109.471
+  EndBranch1
+  Branch2:
+    Height = 1.0
+    Scale = 0.3333333
+    Lean = 20.0
+    Rotate = 109.471
+    Twist = 0.0
+  EndBranch2
+  Branch3:
+    Height = 0.5
+    Scale = 0.3
+    Lean = 30.0
+    Rotate = 109.471
+    Twist = 54.673
+  EndBranch3
+EndDTIFS
+
+DTIFS: 
+  Name = "A Maple tree?"
+  Branches = 3
+  Use heights = 1
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.26
+  Stem:
+    Scale = 0.618034
+    Lean = 0.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Height = 0.75
+    Lean = 54.0
+    Rotate = -90.0
+  EndBranch1
+  Branch2:
+    Height = 0.5
+    Lean = 36.0
+    Rotate = 90.0
+  EndBranch2
+EndDTIFS
+
+DTIFS:
+  Name = "Younger Tree"
+  Branches = 2
+  Use heights = 1
+  Global scale = 0
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.707
+    Lean = 30.0
+    Rotate = 109.471
+  EndStem
+  Branch1:
+    Height = 0.5
+    Scale = 0.618034
+    Lean = 45.0
+    Rotate = 0.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Older Tree"
+  Branches = 2
+  Use heights = 1
+  Global scale = 0
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.015
+  Height = -0.15
+  Stem:
+    Scale = 0.8
+    Lean = 30.0
+    Rotate = 109.471
+  EndStem
+  Branch1:
+    Height = 0.5
+    Scale = 0.618034
+    Lean = 45.0
+    Rotate = 0.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Double Lévy"
+  Branches = 4
+  Use heights = 1
+  Global scale = 0
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.37
+  Stem:
+    Scale = 0.4
+    Lean = 45.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Height = 1.0
+    Scale = 0.4
+    Lean =  45.0
+    Rotate = 180.0
+  EndBranch1
+  Branch2:
+    Height = 0.75
+    Scale = 0.5
+    Lean =  135.0
+    Rotate = 0.0
+  EndBranch2
+  Branch3:
+    Height = 0.75
+    Scale = 0.5
+    Lean =  135.0
+    Rotate = 180.0
+  EndBranch3
+EndDTIFS
+
+DTIFS:
+  Name = "Fractal Cube"
+  Branches = 8
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.37
+  Stem:
+    Scale = 0.4
+    Lean = 54.7355
+    Rotate = 45.0
+  EndStem
+  Branch1:
+    Lean = 54.7355
+    Rotate = 135.0
+  EndBranch1
+  Branch2:
+    Lean = 54.7355
+    Rotate = 225.0
+  EndBranch2
+  Branch3:
+    Lean = 54.7355
+    Rotate = 315.0
+  EndBranch3
+  Branch4:
+    Lean = 125.2645
+    Rotate = 45.0
+  EndBranch4
+  Branch5:
+    Lean = 125.2645
+    Rotate = 135.0
+  EndBranch5
+  Branch6:
+    Lean = 125.2645
+    Rotate = 225.0
+  EndBranch6
+  Branch7:
+    Lean = 125.2645
+    Rotate = 315.0
+  EndBranch7
+EndDTIFS
+
+DTIFS:
+  Name = "Octalia"
+  Branches = 8
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.37
+  Stem:
+    Scale = 0.275
+    Lean =  22.5
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean = -22.5
+    Rotate = 0.0
+  EndBranch1
+  Branch2:
+    Lean = 67.5
+    Rotate = 0.0
+  EndBranch2
+  Branch3:
+    Lean = -67.5
+    Rotate = 0.0
+  EndBranch3
+  Branch4:
+    Lean = 112.5
+    Rotate = 0.0
+  EndBranch4
+  Branch5:
+    Lean = -112.5
+    Rotate = 0.0
+  EndBranch5
+  Branch6:
+    Lean = 157.5
+    Rotate = 0.0
+  EndBranch6
+  Branch7:
+    Lean = -157.5
+    Rotate = 0.0
+  EndBranch7
+EndDTIFS
+
+DTIFS:
+  Name = "Fill-square"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.01
+  Height = -0.21
+  Stem:
+    Scale = 0.7071068
+    Lean = 90.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean = 90.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Phitriastra"
+  Branches = 3
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.6180339
+    Lean =  60.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Lean =  60.0
+    Rotate = 180.0
+  EndBranch1
+  Branch2:
+    Lean =  180.0
+    Rotate = 0.0
+  EndBranch2
+EndDTIFS
+
+DTIFS:
+  Name = "Cartoon tree"
+  Branches = 8
+  Use heights = 1
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 0
+  Radius = 0.01
+  Height = -0.50
+  Stem:
+    Scale = 0.3333333
+    Lean = 120.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Height = 1.0
+    Lean = 120.0
+    Rotate = 90.0
+  EndBranch1
+  Branch2:
+    Height = 1.0
+    Lean = 120.0
+    Rotate = 180.0
+  EndBranch2
+  Branch3:
+    Height = 1.0
+    Lean = 120.0
+    Rotate = 270.0
+  EndBranch3
+  Branch4:
+    Height = 0.5
+    Lean = 60.0
+    Rotate = 0.0
+  EndBranch4
+  Branch5:
+    Height = 0.5
+    Lean = 60.0
+    Rotate = 90.0
+  EndBranch5
+  Branch6:
+    Height = 0.5
+    Lean = 60.0
+    Rotate = 180.0
+  EndBranch6
+  Branch7:
+    Height = 0.5
+    Lean = 60.0
+    Rotate = 270.0
+  EndBranch7
+EndDTIFS
+
+DTIFS:
+  Name = "Animate I"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  0.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  180.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+DTIFS:
+  Name = "Animate II"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  7.5
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  172.5
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+DTIFS:
+  Name = "Animate III"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  15.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  165.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+DTIFS:
+  Name = "Animate IV"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  22.5
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  157.5
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+DTIFS:
+  Name = "Animate V"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  30.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  150.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+DTIFS:
+  Name = "Animate VI"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  37.5
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  142.49999999 Comm: coz of a bug somewhere 142.5 did not work :-/ EndComm
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS
+
+DTIFS:
+  Name = "Animate VII"
+  Branches = 2
+  Use heights = 0
+  Global scale = 1
+  Scale by height = 0
+  Use twist = 1
+  Radius = 0.005
+  Height = -0.22
+  Stem:
+    Scale = 0.7071068
+    Twist = 0.0
+    Lean =  45.0
+    Rotate = 0.0
+  EndStem
+  Branch1:
+    Twist = 180.0
+    Lean =  135.0
+    Rotate = 180.0
+  EndBranch1
+EndDTIFS

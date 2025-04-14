@@ -1,4 +1,4 @@
-#define NAME 		"3D IFS"
+#define NAME 		"3D L-system Tree Generator"
 #define RND 		( ( float ) rand ( ) / RAND_MAX )
 #define RNDBOOL	( 0 == int ( RND * 2 ) )
 #define	RNDSGN	( SGN ( 0.5f + RND ) )
@@ -49,9 +49,7 @@
 #define	WASNOERROR	( 0 )
 #define	WASERROR 		( 1 )
 
-// CODE MAKRONS:
 
-// Draw a filled box:
 #define FILLBOX(xstart, ystart, xend, yend, fillcol)\
 				(	lixs = xstart,\
         	liys = ystart,\
@@ -60,16 +58,12 @@
           lcol = fillcol,\
           drawBoxi ( )\
         )
-// Draw a filled box.
 
-// Outlined textbox: (outline is one point wider than the coordinates)
 #define TEXTBOX(xstart, ystart, xend, yend, bordercol, fillcol)\
 				(	FILLBOX ( xstart - 1, ystart - 1, xend + 1, yend + 1, bordercol ),\
           FILLBOX ( xstart, ystart, xend, yend, fillcol )\
         )
-// Outlined textbox.
 
-// Color cycler:
 #define COLPAL\
 				{	tcolor = lpCols [ pali ];\
 				  tRed = ( tcolor >> 16 ) & 0xFF;\
@@ -79,15 +73,12 @@
 				  dcg = ( ( dcg + tGreen) >> 1 ) & 0xFF;\
 				  dcb = ( ( dcb + tBlue) >> 1 ) & 0xFF;\
         }
-// Color cycler.
 
-// Color selector:
 #define COLMOD\
 				{	dcr = ( ( dcr + tcr [ coli ] ) >> 1 ) & 0xFF;\
 					dcg = ( ( dcg + tcg [ coli ] ) >> 1 ) & 0xFF;\
 					dcb = ( ( dcb + tcb [ coli ] ) >> 1 ) & 0xFF;\
         }
-// Color selector.
 
 // Branch structure:
 struct DTBRA {
@@ -119,3 +110,60 @@ struct DTIFS {
   DTBRA branch_6;
   DTBRA branch_7;
 };
+
+void CamAng(void);
+void clearallbufs(uint32_t RGBdata);
+void clearscreen(uint32_t RGBdata);
+void clearscreenbufs(uint32_t RGBdata);
+void clearViewmess(void);
+void createbackground(void);
+void CreatePalette(void);
+bool doInit(void);
+void DoMyStuff(void);
+void drawBox(void);
+void drawBoxi(void);
+void drawLine(void);
+void drawMulticolLine(void);
+void finiObjects(void);
+double getlevel(double xmin, double xmax, double ystart, double yend, double x, double Q);
+void IFSlight(void);
+void IFSplot(void);
+void initiateIFS(void);
+void leafcols(void);
+void LitAng(void);
+void loadtrees(void);
+void loadtree(void);
+void manual(void);
+void newrender(void);
+void newsetup(void);
+void setupQuad(void);
+int opensource(const char* fname);
+void pixelsmess(void);
+void printsceneinfo(void);
+void printtreeinfo(void);
+void randombranch(int indx);
+void rotatelight(void);
+void rotateview(void);
+int SGN(double x);
+void ShowPalette(int mode);
+void showpic(void);
+void spacemess(void);
+void stemcols(void);
+void unrotatelight(void);
+void unrotateview(void);
+void viewcols(void);
+void writecols(void);
+void renderToTexture(void);
+void processInput(void);
+void error_callback(int error, const char* description);
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
+// OpenGL helper functions
+void createShaders(void);
+void setupFramebuffer(void);
+void initOpenGL(void);
+void drawScreenTexture(void);
+GLuint loadTexture(const std::vector<unsigned char>& data, int width, int height);
+void renderText(const char* text, float x, float y, float scale, uint32_t color);
+void drawText(float x, float y, const char* text, float r, float g, float b);
+void unpackColor(unsigned int col, float *r, float *g, float *b);

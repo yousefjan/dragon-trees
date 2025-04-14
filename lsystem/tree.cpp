@@ -16,9 +16,13 @@
 #define STB_EASY_FONT_IMPLEMENTATION
 #include "stb_easy_font.h"
 
-#include "utils.h"
+#include "makrons.h"
 #include "atree.h"
 
+
+/* --------------------------------------------------------------------- *
+            DECLARE GLOBAL VARIABLES:
+ * --------------------------------------------------------------------- */
 // OpenGL context
 GLFWwindow* window;
 GLuint screenTexture;
@@ -87,8 +91,9 @@ DTBRA branches[NUMTREES][8];
 DTIFS trees[NUMTREES];
 
 // Main task flags:
-bool renderactive = true;
-int programMode = 0;
+bool runflag = false;
+bool renderactive = false;
+int programMode = 1;
 
 // Image buffers & stuff:
 uint32_t* lpBuf;                               // Pointer to screen buffer.
@@ -181,6 +186,11 @@ const char* textpales[3] = {
     "Normal (sunspot)",
     "Flourescent (moonspot)",
     "Filament (noonspot)"
+};
+
+const char* textfunky[2] = {
+    "FUNKYCOLOURS off",
+    "FUNKYCOLOURS on"
 };
 
 // Temporary string buffer:
@@ -302,7 +312,7 @@ double zbuf[10];
 int ui = 9;
 
 // Number of levels used
-short int ilevels = 4;
+short int ilevels = 18;
 
 // Number of branches selected:
 int numbranch;
@@ -349,6 +359,63 @@ ATREE tree[NUMTREES];
 bool keyStates[512]; // More than enough for all GLFW keys
 bool keyPressed[512]; // To track if a key was just pressed this frame
 
+void CamAng(void);
+void clearallbufs(uint32_t RGBdata);
+void clearscreen(uint32_t RGBdata);
+void clearscreenbufs(uint32_t RGBdata);
+void clearViewmess(void);
+void createbackground(void);
+void CreatePalette(void);
+bool doInit(void);
+void DoMyStuff(void);
+void drawBox(void);
+void drawBoxi(void);
+void drawLine(void);
+void drawMulticolLine(void);
+void finiObjects(void);
+double getlevel(double xmin, double xmax, double ystart, double yend, double x, double Q);
+void IFSlight(void);
+void IFSplot(void);
+void initiateIFS(void);
+void leafcols(void);
+void LitAng(void);
+void loadtrees(void);
+void loadtree(void);
+void manual(void);
+void newrender(void);
+void newsetup(void);
+void setupQuad(void);
+int opensource(const char* fname);
+void pixelsmess(void);
+void printsceneinfo(void);
+void printtreeinfo(void);
+void randombranch(int indx);
+void rotatelight(void);
+void rotateview(void);
+int SGN(double x);
+void ShowPalette(int mode);
+void showpic(void);
+void spacemess(void);
+void stemcols(void);
+void unrotatelight(void);
+void unrotateview(void);
+void viewcols(void);
+void writecols(void);
+void renderToTexture(void);
+void processInput(void);
+void error_callback(int error, const char* description);
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
+// OpenGL helper functions
+void createShaders(void);
+void setupFramebuffer(void);
+void initOpenGL(void);
+void drawScreenTexture(void);
+GLuint loadTexture(const std::vector<unsigned char>& data, int width, int height);
+void renderText(const char* text, float x, float y, float scale, uint32_t color);
+void drawText(float x, float y, const char* text, float r, float g, float b);
+void unpackColor(unsigned int col, float *r, float *g, float *b);
+
 int SGN(double x)
 {
     if (x < 0.0f)
@@ -386,7 +453,376 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
  * --------------------------------------------------------------------- */
 void processInput(void)
 {
-    if (programMode == 0) {
+    // Handle keys similar to original Windows message loop
+    if (!runflag)
+        return;
+
+    if (programMode == 0 && renderactive) {
+        // Render screen keys
+        
+        // ESC key
+        if (keyPressed[GLFW_KEY_ESCAPE]) {
+            renderactive = false;
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
+        
+        // SPACE key
+        if (keyPressed[GLFW_KEY_SPACE]) {
+            renderactive = false;
+            programMode = 1;
+        }
+        
+        // PAGE_UP key
+        if (keyPressed[GLFW_KEY_PAGE_UP]) {
+            imszoom *= twup;
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // PAGE_DOWN key
+        if (keyPressed[GLFW_KEY_PAGE_DOWN]) {
+            imszoom *= twdwn;
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // HOME key
+        if (keyPressed[GLFW_KEY_HOME]) {
+            ryv = 0.0f * rad;
+            rxv = 0.0f * rad;
+            CamAng();
+            imszoom = 1.0f;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // Arrow keys
+        if (keyPressed[GLFW_KEY_UP]) {
+            rxv += 0.01f;
+            if (int(rxv) > 180)
+                rxv = 180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_RIGHT]) {
+            ryv += 0.01f;
+            if (int(ryv) > 180)
+                ryv = 180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_DOWN]) {
+            rxv -= 0.01f;
+            if (int(rxv) < -180)
+                rxv = -180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_LEFT]) {
+            ryv -= 0.01f;
+            if (int(ryv) < -180)
+                ryv = -180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // F1-F4 keys
+        if (keyPressed[GLFW_KEY_F1]) {
+            trees[treeinuse].usehig = (trees[treeinuse].usehig + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_F2]) {
+            trees[treeinuse].glblscl = (trees[treeinuse].glblscl + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_F3]) {
+            trees[treeinuse].sctrnsl = (trees[treeinuse].sctrnsl + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_F4]) {
+            trees[treeinuse].usetwst = (trees[treeinuse].usetwst + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        // Number keys 1-8
+        if (keyPressed[GLFW_KEY_1] || keyPressed[GLFW_KEY_2] || keyPressed[GLFW_KEY_3] || 
+            keyPressed[GLFW_KEY_4] || keyPressed[GLFW_KEY_5] || keyPressed[GLFW_KEY_6] || 
+            keyPressed[GLFW_KEY_7] || keyPressed[GLFW_KEY_8]) {
+            
+            int numKey = 0;
+            if (keyPressed[GLFW_KEY_1]) numKey = 0;
+            else if (keyPressed[GLFW_KEY_2]) numKey = 1;
+            else if (keyPressed[GLFW_KEY_3]) numKey = 2;
+            else if (keyPressed[GLFW_KEY_4]) numKey = 3;
+            else if (keyPressed[GLFW_KEY_5]) numKey = 4;
+            else if (keyPressed[GLFW_KEY_6]) numKey = 5;
+            else if (keyPressed[GLFW_KEY_7]) numKey = 6;
+            else if (keyPressed[GLFW_KEY_8]) numKey = 7;
+            
+            randombranch(numKey);
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            writecols();
+            clearViewmess();
+            
+        }
+        
+        // Alphabet keys
+        if (keyPressed[GLFW_KEY_A]) {
+            ryv = -180.0f * rad + RND * 360.0f * rad;
+            ryx = cos(ryv);
+            ryy = sin(ryv);
+            rxv = -10.0f * rad + RND * 100.0f * rad;
+            rxx = cos(rxv);
+            rxy = sin(rxv);
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_B]) {
+            showbackground++;
+            if (showbackground > 4)
+                showbackground = 0;
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            writecols();
+            clearViewmess();
+        }
+        
+        if (keyPressed[GLFW_KEY_C]) {
+            clearscreenbufs(bgcol[showbackground]);
+            trees[treeinuse].radius *= sqrt(twup);
+        }
+        
+        if (keyPressed[GLFW_KEY_D]) {
+            trees[treeinuse].radius *= twup;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_E]) {
+            if (++logfoliage >= 3)
+                logfoliage = 0;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+            if (logfoliage != 1)
+                writecols();
+        }
+        
+        if (keyPressed[GLFW_KEY_F]) {
+            trees[treeinuse].radius *= twdwn;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_G]) {
+            groundsize++;
+            if (groundsize > 2)
+                groundsize = 0;
+            createbackground();
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+        }
+        
+        if (keyPressed[GLFW_KEY_I]) {
+            printsceneinfo();
+            lcol = txcol[showbackground];
+            pixelsmess();
+            printtreeinfo();
+            writecols();
+            if (colourmode)
+                ShowPalette(ABSZ);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_K]) {
+            if (!lockshadow)
+                lockshadow = true;
+            trees[treeinuse].radius *= sqrt(twup);
+            clearscreenbufs(bgcol[showbackground]);
+        }
+        
+        if (keyPressed[GLFW_KEY_L]) {
+            lightness++;
+            if (lightness > 1)
+                lightness = 0;
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+        }
+        
+        if (keyPressed[GLFW_KEY_M]) {
+            if (++treeinuse >= NUMTREES)
+                treeinuse = 0;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printtreeinfo();
+            printsceneinfo();
+            writecols();
+        }
+        
+        if (keyPressed[GLFW_KEY_N]) {
+            if (++selnumbranch > 7)
+                selnumbranch = 0;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printtreeinfo();
+            printsceneinfo();
+            writecols();
+        }
+        
+        if (keyPressed[GLFW_KEY_O]) {
+            clearscreen(bgcol[showbackground]);
+            if (++colourmode > 1)
+                colourmode = 0;
+            if (colourmode) {
+                CreatePalette();
+                ShowPalette(ABSZ);
+            }
+            stemcols();
+            leafcols();
+            printsceneinfo();
+            newrender();
+            writecols();
+            clearViewmess();
+            clearscreenbufs(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_P]) {
+            clearscreen(bgcol[showbackground]);
+            if (colourmode) {
+                CreatePalette();
+                ShowPalette(ABSZ);
+            }
+            stemcols();
+            leafcols();
+            printsceneinfo();
+            newrender();
+            writecols();
+            clearViewmess();
+            clearscreenbufs(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_R]) {
+            treeinuse = 31;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            writecols();
+            clearViewmess();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_S]) {
+            trees[treeinuse].height *= twdwn;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_T]) {
+            FILLBOX(0, 0, WIDTH, HEIGHT, 0x00FFFFFF);
+            
+            lcol = 0x00000080;
+            pixelsmess();
+        }
+        
+        if (keyPressed[GLFW_KEY_U]) {
+            if (++useLoCoS >= 3)
+                useLoCoS = 0;
+            else
+                trees[treeinuse].radius = fabs(trees[treeinuse].height / 2.0f);
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_V]) {
+            showpic();
+        }
+        
+        if (keyPressed[GLFW_KEY_W]) {
+            whitershade++;
+            if (whitershade > 2)
+                whitershade = 0;
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+        }
+        
+        if (keyPressed[GLFW_KEY_X]) {
+            trees[treeinuse].height *= twup;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+    }
+    else if (programMode == 1) {
+        // Info screen keys
+        // printf("Info screen program mode = 1\n");
         
         // ESC key
         if (keyPressed[GLFW_KEY_ESCAPE]) {
@@ -550,18 +986,15 @@ int main(int argc, char** argv)
     // Setup fonts and fractal functions
     initiateIFS();
     
-        
+    runflag = true;
+    
     // Main loop
     // printf("Start main loop...\n");
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window) && runflag) {
         // Process input
         processInput();
         // printf("Processed input\n");
-        // programMode = 0;
-        showpic();
-        newrender();
-
-
+        
         if (programMode == 0 && renderactive) {
             // printf("Rendering...\n");
             DoMyStuff();
@@ -897,16 +1330,215 @@ void initiateIFS(void)
 void DoMyStuff(void)
 {
     // Don't count pixels written for bottom plane:
+    // Comment: The counter is updated inside the plot function.
+    //          This is why I save the value, (to restore later).
+    //          Ok! I could use a flag instead, but did not =)
     spixelswritten = pixelswritten;
     sshadowswritten = shadowswritten;
 
-    // Create a single batch buffer for all elements (bottom plane, leaves, branches)
-    std::vector<std::tuple<int, int, uint32_t, int>> pixelBatch; // x, y, color, z-value
-    pixelBatch.reserve(1000000); // Pre-allocate space for all pixels
+    // Show background?
+    if (showbackground < 3)
+    {
+        // ************************* //
+        // * Bottom ******** IFS ! * //
+        // ************************* //
+
+        // Turn glow on:
+        useglow = true;
+
+        // Don't write to shadow map:
+        doshadow = false;
+
+        // Don't use normal, (maybe I will fix this later):
+        donormal = false;
+
+        // Iteration loop:
+        for (pti = 6; pti >= 0; pti--)
+        {
+            bi = int(RND * 4);
+
+            btx = (btx - tx[bi]) * sc[bi];
+            bty = (bty - ty[bi]) * sc[bi];
+            btz = (btz - tz[bi]) * sc[bi];
+
+            // Attractor-glow:
+            if (useglow)
+            {
+                t = sqrt(btx*btx + bty*bty + btz*btz);
+                if (t > blargel)
+                {
+                    blargel = t;
+                }    // if blargel.
+                t = pow((1.0f - t / blargel), 16.0f);
+                bglow = (bglow + t) / 2.0f;
+            } // Attractor-glow.
+
+            btx += tx[bi];
+            bty += ty[bi];
+            btz += tz[bi];
+
+            // Color:
+            switch (colourmode)
+            {
+                case NORMALCOLOURS:
+                default:
+                    bcr = ((bcr + tcr[bi]) >> 1) & 0xFF;
+                    bcg = ((bcg + tcg[bi]) >> 1) & 0xFF;
+                    bcb = ((bcb + tcb[bi]) >> 1) & 0xFF;
+                break; // NORMALCOLOURS.
+            } // Switch colourmode.
+
+            // Scale & translate to scene:
+            xt = btx + CPOSX;
+            yt = bty + CPOSY;
+            zt = btz + CPOSZ;
+
+            // it's light:
+            glow = bglow;
+            IFSlight();
+
+            // Scale & translate to scene:
+            xt = btx + CPOSX;
+            yt = bty + CPOSY;
+            zt = btz + CPOSZ;
+
+            // Select colour for pixel:
+            crt = bcr;
+            cgt = bcg;
+            cbt = bcb;
+
+            // Plot pixel to scene:
+            IFSplot();
+
+        } // End of the iteration loop (the bottom-plane).
+    } // if showbackground.
 
     // ************************//
-    // * Stem and Branches IFS //
+    // * Fractal ******* IFS ! //
     // ************************//
+
+    // FIRST DO IFS FOR FOLIAGE:
+
+    if (logfoliage != 1)
+    {
+        // Coordinate:
+        dtx = xbuf[ui];
+        dty = ybuf[ui];
+        dtz = zbuf[ui];
+
+        // Use shadow map?:
+        if (lockshadow)
+            doshadow = false;
+        else
+            doshadow = true;
+
+        // Do not use normal for foliage:
+        donormal = false;
+
+        // Restore iteration counter:
+        pixelswritten = spixelswritten;
+        shadowswritten = sshadowswritten;
+
+        // IFS-snurran!
+        for (pti = 8; pti >= 0; pti--)
+        {
+            itersdone++;
+            di = 4 + int(RND * trees[treeinuse].branches);
+
+            // Translate to scene:
+            xt = dtx + CPOSX;
+            yt = dty + CPOSY;
+            zt = dtz + CPOSZ;
+
+            // Save position:
+            tmpx = xt;
+            tmpy = yt;
+            tmpz = zt;
+
+            // Get luminousity & plot in the light's Z-table:
+            IFSlight();
+
+            // Translate to scene:
+            xt = dtx + CPOSX;
+            yt = dty + CPOSY;
+            zt = dtz + CPOSZ;
+
+            // Select colour for pixel:
+            crt = dcr;
+            cgt = dcg;
+            cbt = dcb;
+
+            // Plot pixel to scene:
+            IFSplot();
+
+            // **** TRANSFORMATIONS **** //
+            // ** Pixel ** //
+            // Rotations:
+
+            i = di - 4;
+            // Do twist?:
+            if (trees[treeinuse].usetwst)
+            {
+                t = branches[treeinuse][i].twistc * dtz - branches[treeinuse][i].twists * dtx;
+                dtx = branches[treeinuse][i].twistc * dtx + branches[treeinuse][i].twists * dtz;
+                dtz = t;
+            } // Do twist?.
+            // Lean:
+            t = branches[treeinuse][i].leanc * dtx - branches[treeinuse][i].leans * dty;
+            dty = branches[treeinuse][i].leanc * dty + branches[treeinuse][i].leans * dtx;
+            dtx = t;
+            // Rotate:
+            t = branches[treeinuse][i].rotatec * dtz - branches[treeinuse][i].rotates * dtx;
+            dtx = branches[treeinuse][i].rotatec * dtx + branches[treeinuse][i].rotates * dtz;
+            dtz = t;
+
+            // Scale!
+            // Global scale?
+            if (trees[treeinuse].glblscl)
+            {
+                dtx *= branches[treeinuse][0].scale;
+                dty *= branches[treeinuse][0].scale;
+                dtz *= branches[treeinuse][0].scale;
+            }
+            // No!, all diffrent:
+            else
+            {
+                dtx *= branches[treeinuse][i].scale;
+                dty *= branches[treeinuse][i].scale;
+                dtz *= branches[treeinuse][i].scale;
+            }
+
+            // Scale by heigth of branch?
+            if (trees[treeinuse].sctrnsl)
+            {
+                dtx *= branches[treeinuse][i].height;
+                dty *= branches[treeinuse][i].height;
+                dtz *= branches[treeinuse][i].height;
+            }
+
+            // Translate!
+            // Use heights?
+            if (trees[treeinuse].usehig)
+                dty += trees[treeinuse].height * branches[treeinuse][i].height;
+            // No!, all at top of stem:
+            else
+                dty += trees[treeinuse].height;
+
+            // Color!
+            dcr = ((dcr + tcr[di]) >> 1) & 0xFF;
+            dcg = ((dcg + tcg[di]) >> 1) & 0xFF;
+            dcb = ((dcb + tcb[di]) >> 1) & 0xFF;
+
+        } // End of the iteration loop (the IFS random walk).
+    } // If logfoliage != 1.
+
+    // Save current coordinate:
+    xbuf[ui] = dtx;
+    ybuf[ui] = dty;
+    zbuf[ui] = dtz;
+
+    // THEN DO L-IFSYS FOR STUB AND STEM:
+
     if (logfoliage != 2)
     {
         switch (useLoCoS)
@@ -988,6 +1620,12 @@ void DoMyStuff(void)
         LoCoSPali = (PALSIZE >> 1);
         switch (colourmode)
         {
+            case FUNKYCOLOURS:
+                tcolor = lpCols[LoCoSPali];
+                dcr = (tcolor >> 16) & 0xFF;
+                dcg = (tcolor >> 8) & 0xFF;
+                dcb = tcolor & 0xFF;
+            break; // FUNKYCOLOURS.
             case NORMALCOLOURS:
             default:
                 dcr = lcr[ilevels];
@@ -1003,566 +1641,222 @@ void DoMyStuff(void)
             doshadow = true;
 
         // Use normal for stem and branches:
-        donormal = false; // was true
+        donormal = true;
 
         // Restore iteration counter:
         pixelswritten = spixelswritten;
         shadowswritten = sshadowswritten;
 
-        // printf("%i\n", ilevels);
+        // IFS-snurran!
+        for (pti = (ilevels - 1); pti >= 0; pti--)
+        {
+            itersdone++;
+            di = 4 + int(RND * trees[treeinuse].branches);
 
-        // Process iterations for branches and stem
-        for (int batch = 0; batch < 100; batch++) {
-            // IFS-snurran!
-            for (pti = (ilevels - 1); pti >= 0; pti--)
+            // Translate to scene:
+            xt = dtx + CPOSX;
+            yt = dty + CPOSY;
+            zt = dtz + CPOSZ;
+
+            // Save position:
+            tmpx = xt;
+            tmpy = yt;
+            tmpz = zt;
+
+            // Get luminousity & plot in the light's Z-table:
+            IFSlight();
+
+            // Translate to scene:
+            xt = dtx + CPOSX;
+            yt = dty + CPOSY;
+            zt = dtz + CPOSZ;
+
+            // Select colour for pixel:
+            crt = dcr;
+            cgt = dcg;
+            cbt = dcb;
+
+            // Plot pixel to scene:
+            IFSplot();
+
+            // **** TRANSFORMATIONS **** //
+            // ** Pixel ** //
+            // Rotations:
+
+            i = di - 4;
+            // Do twist?:
+            if (trees[treeinuse].usetwst)
             {
-                itersdone++;
-                di = 4 + int(RND * trees[treeinuse].branches);
-
-                // Translate to scene:
-                xt = dtx + CPOSX;
-                yt = dty + CPOSY;
-                zt = dtz + CPOSZ;
-
-                // Save position:
-                tmpx = xt;
-                tmpy = yt;
-                tmpz = zt;
-
-                // Get luminousity & plot in the light's Z-table:
-                IFSlight();
-
-                // Translate to scene:
-                xt = dtx + CPOSX;
-                yt = dty + CPOSY;
-                zt = dtz + CPOSZ;
-
-                // Select colour for pixel:
-                crt = dcr;
-                cgt = dcg;
-                cbt = dcb;
-
-                // Rotate to angle of view:
-                rotateview();
-
-                // Clip z:
-                if ((zt > -1.0f) && (zt < 1.0f))
-                {
-                    size = (3.0f + zt) / 2.0f;
-                    nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
-                    zt = (ims * imszoom) / size;
-
-                    nY = BMIDY + int(yt * zt);
-                    nX = BMIDX + int(xt * zt);
-                    
-                    // Clip y:
-                    if ((nY >= 0) && (nY < BHEIGHT))
-                    {
-                        // Clip x:
-                        if ((nX >= 0) && (nX < BWIDTH))
-                        {
-                            // Process color
-                            if (overexpose)
-                            {
-                                crt = int((crt + overexpose) / luma);
-                                cgt = int((cgt + overexpose) / luma);
-                                cbt = int((cbt + overexpose) / luma);
-                            }
-
-                            // Whiter shade of pale?:
-                            if (whitershade)
-                            {
-                                // Cold in varm:
-                                if (whitershade == 1)
-                                {
-                                    crt = (((crt * 3) + bright) >> 2) & 0xFF;
-                                    cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                                    cbt = ((cbt + bright) >> 1) & 0xFF;
-                                }
-                                // Varm in cold:
-                                else
-                                {
-                                    crt = ((crt + bright) >> 1) & 0xFF;
-                                    cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                                    cbt = (((cbt * 3) + bright) >> 2) & 0xFF;
-                                }
-                            }
-
-                            crt = ((crt * bright) >> 8) & 0xFF;
-                            cgt = ((cgt * bright) >> 8) & 0xFF;
-                            cbt = ((cbt * bright) >> 8) & 0xFF;
-                            tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
-                            
-                            // Add to batch
-                            pixelBatch.emplace_back(nX, nY, tcolor, nZ);
-                            pixelswritten++;
-                        }
-                    }
-                }
-
-                // **** TRANSFORMATIONS **** //
-                // ** Pixel ** //
-                // Rotations:
-                i = di - 4;
-                // Twist:
-                if (trees[treeinuse].usetwst)
-                {
-                    t = branches[treeinuse][i].twistc * dtz - branches[treeinuse][i].twists * dtx;
-                    dtx = branches[treeinuse][i].twistc * dtx + branches[treeinuse][i].twists * dtz;
-                    dtz = t;
-                }
-                // Lean:
-                t = branches[treeinuse][i].leanc * dtx - branches[treeinuse][i].leans * dty;
-                dty = branches[treeinuse][i].leanc * dty + branches[treeinuse][i].leans * dtx;
-                dtx = t;
-                // Rotate:
-                t = branches[treeinuse][i].rotatec * dtz - branches[treeinuse][i].rotates * dtx;
-                dtx = branches[treeinuse][i].rotatec * dtx + branches[treeinuse][i].rotates * dtz;
+                t = branches[treeinuse][i].twistc * dtz - branches[treeinuse][i].twists * dtx;
+                dtx = branches[treeinuse][i].twistc * dtx + branches[treeinuse][i].twists * dtz;
                 dtz = t;
+            } // Do twist?.
+            // Lean:
+            t = branches[treeinuse][i].leanc * dtx - branches[treeinuse][i].leans * dty;
+            dty = branches[treeinuse][i].leanc * dty + branches[treeinuse][i].leans * dtx;
+            dtx = t;
+            // Rotate:
+            t = branches[treeinuse][i].rotatec * dtz - branches[treeinuse][i].rotates * dtx;
+            dtx = branches[treeinuse][i].rotatec * dtx + branches[treeinuse][i].rotates * dtz;
+            dtz = t;
 
-                // Scale!
-                // Global scale?
-                if (trees[treeinuse].glblscl)
-                {
-                    dtx *= branches[treeinuse][0].scale;
-                    dty *= branches[treeinuse][0].scale;
-                    dtz *= branches[treeinuse][0].scale;
-                }
-                // No!, all diffrent:
-                else
-                {
-                    dtx *= branches[treeinuse][i].scale;
-                    dty *= branches[treeinuse][i].scale;
-                    dtz *= branches[treeinuse][i].scale;
-                }
+            // Scale!
+            // Global scale?
+            if (trees[treeinuse].glblscl)
+            {
+                dtx *= branches[treeinuse][0].scale;
+                dty *= branches[treeinuse][0].scale;
+                dtz *= branches[treeinuse][0].scale;
+            }
+            // No!, all diffrent:
+            else
+            {
+                dtx *= branches[treeinuse][i].scale;
+                dty *= branches[treeinuse][i].scale;
+                dtz *= branches[treeinuse][i].scale;
+            }
 
-                // Scale by heigth of branch?
-                if (trees[treeinuse].sctrnsl)
-                {
-                    dtx *= branches[treeinuse][i].height;
-                    dty *= branches[treeinuse][i].height;
-                    dtz *= branches[treeinuse][i].height;
-                }
+            // Scale by heigth of branch?
+            if (trees[treeinuse].sctrnsl)
+            {
+                dtx *= branches[treeinuse][i].height;
+                dty *= branches[treeinuse][i].height;
+                dtz *= branches[treeinuse][i].height;
+            }
 
-                // Translate!
-                // Use heights?
-                if (trees[treeinuse].usehig)
-                    dty += trees[treeinuse].height * branches[treeinuse][i].height;
-                // No!, all at top of stem:
-                else
-                    dty += trees[treeinuse].height;
+            // Translate!
+            // Use heights?
+            if (trees[treeinuse].usehig)
+                dty += trees[treeinuse].height * branches[treeinuse][i].height;
+            // No!, all at top of stem:
+            else
+                dty += trees[treeinuse].height;
 
-                // ** Pixel normal ** //
-                // Rotations:
-                // Do twist?:
-                if (trees[treeinuse].usetwst)
-                {
-                    t = branches[treeinuse][i].twistc * dntz - branches[treeinuse][i].twists * dntx;
-                    dntx = branches[treeinuse][i].twistc * dntx + branches[treeinuse][i].twists * dntz;
-                    dntz = t;
-                }
-                // Lean:
-                t = branches[treeinuse][i].leanc * dntx - branches[treeinuse][i].leans * dnty;
-                dnty = branches[treeinuse][i].leanc * dnty + branches[treeinuse][i].leans * dntx;
-                dntx = t;
-                // Rotate:
-                t = branches[treeinuse][i].rotatec * dntz - branches[treeinuse][i].rotates * dntx;
-                dntx = branches[treeinuse][i].rotatec * dntx + branches[treeinuse][i].rotates * dntz;
+            // ** Pixel normal ** //
+            // Rotations:
+
+            // Do twist?:
+            if (trees[treeinuse].usetwst)
+            {
+                t = branches[treeinuse][i].twistc * dntz - branches[treeinuse][i].twists * dntx;
+                dntx = branches[treeinuse][i].twistc * dntx + branches[treeinuse][i].twists * dntz;
                 dntz = t;
+            } // Do twist?.
+            // Lean:
+            t = branches[treeinuse][i].leanc * dntx - branches[treeinuse][i].leans * dnty;
+            dnty = branches[treeinuse][i].leanc * dnty + branches[treeinuse][i].leans * dntx;
+            dntx = t;
+            // Rotate:
+            t = branches[treeinuse][i].rotatec * dntz - branches[treeinuse][i].rotates * dntx;
+            dntx = branches[treeinuse][i].rotatec * dntx + branches[treeinuse][i].rotates * dntz;
+            dntz = t;
 
-                // Scale!
-                // Global scale?
-                if (trees[treeinuse].glblscl)
-                {
-                    dntx *= branches[treeinuse][0].scale;
-                    dnty *= branches[treeinuse][0].scale;
-                    dntz *= branches[treeinuse][0].scale;
-                }
-                // No!, all diffrent:
-                else
-                {
-                    dntx *= branches[treeinuse][i].scale;
-                    dnty *= branches[treeinuse][i].scale;
-                    dntz *= branches[treeinuse][i].scale;
-                }
-
-                // Scale by heigth of branch?
-                if (trees[treeinuse].sctrnsl)
-                {
-                    dntx *= branches[treeinuse][i].height;
-                    dnty *= branches[treeinuse][i].height;
-                    dntz *= branches[treeinuse][i].height;
-                }
-
-                // Translate!
-                // Use heights?
-                if (trees[treeinuse].usehig)
-                    dnty += trees[treeinuse].height * branches[treeinuse][i].height;
-                // No!, all at top of stem:
-                else
-                    dnty += trees[treeinuse].height;
-
-                // Re-normalize!
-                dntx -= dtx;
-                dnty -= dty;
-                dntz -= dtz;
-                t = sqrt(dntx*dntx + dnty*dnty + dntz*dntz);
-                dntx /= t;
-                dnty /= t;
-                dntz /= t;
-
-                // Color:
-                switch (colourmode)
-                {
-                    case NORMALCOLOURS:
-                    default:
-                        dcr = ((dcr + (lcr[pti] * 3)) >> 2) & 0xFF;
-                        dcg = ((dcg + (lcg[pti] * 3)) >> 2) & 0xFF;
-                        dcb = ((dcb + (lcb[pti] * 3)) >> 2) & 0xFF;
-                    break; // NORMALCOLOURS.
-                }
-            }
-        }
-    }
-
-    // ************************* //
-    // * Plane ********* IFS ! * //
-    // ************************* //
-    if (showbackground < 3)
-    {
-        // Turn glow on:
-        useglow = true;
-
-        // Don't write to shadow map:
-        doshadow = false;
-
-        // Don't use normal, (maybe I will fix this later):
-        donormal = false;
-
-        // Process iterations for background 
-        for (int batch = 0; batch < 20000; batch++) {
-            // Iteration loop:
-            for (pti = 6; pti >= 0; pti--)
+            // Scale!
+            // Global scale?
+            if (trees[treeinuse].glblscl)
             {
-                bi = int(RND * 4);
-
-                btx = (btx - tx[bi]) * sc[bi];
-                bty = (bty - ty[bi]) * sc[bi];
-                btz = (btz - tz[bi]) * sc[bi];
-
-                // Attractor-glow:
-                if (useglow)
-                {
-                    t = sqrt(btx*btx + bty*bty + btz*btz);
-                    if (t > blargel)
-                    {
-                        blargel = t;
-                    }
-                    t = pow((1.0f - t / blargel), 16.0f);
-                    bglow = (bglow + t) / 2.0f;
-                }
-
-                btx += tx[bi];
-                bty += ty[bi];
-                btz += tz[bi];
-
-                // Color:
-                switch (colourmode)
-                {
-                    case NORMALCOLOURS:
-                    default:
-                        bcr = ((bcr + tcr[bi]) >> 1) & 0xFF;
-                        bcg = ((bcg + tcg[bi]) >> 1) & 0xFF;
-                        bcb = ((bcb + tcb[bi]) >> 1) & 0xFF;
-                    break;
-                }
-
-                // Scale & translate to scene:
-                xt = btx + CPOSX;
-                yt = bty + CPOSY;
-                zt = btz + CPOSZ;
-
-                // it's light:
-                glow = bglow;
-                IFSlight();
-
-                // Scale & translate to scene:
-                xt = btx + CPOSX;
-                yt = bty + CPOSY;
-                zt = btz + CPOSZ;
-
-                // Select colour for pixel:
-                crt = bcr;
-                cgt = bcg;
-                cbt = bcb;
-
-                // Rotate to angle of view:
-                rotateview();
-
-                // Clip z:
-                if ((zt > -1.0f) && (zt < 1.0f))
-                {
-                    size = (3.0f + zt) / 2.0f;
-                    nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
-                    zt = (ims * imszoom) / size;
-
-                    nY = BMIDY + int(yt * zt);
-                    nX = BMIDX + int(xt * zt);
-                    
-                    // Clip y:
-                    if ((nY >= 0) && (nY < BHEIGHT))
-                    {
-                        // Clip x:
-                        if ((nX >= 0) && (nX < BWIDTH))
-                        {
-                            // Process color as before
-                            if (overexpose)
-                            {
-                                crt = int((crt + overexpose) / luma);
-                                cgt = int((cgt + overexpose) / luma);
-                                cbt = int((cbt + overexpose) / luma);
-                            }
-
-                            // Whiter shade of pale?:
-                            if (whitershade)
-                            {
-                                // Cold in varm:
-                                if (whitershade == 1)
-                                {
-                                    crt = (((crt * 3) + bright) >> 2) & 0xFF;
-                                    cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                                    cbt = ((cbt + bright) >> 1) & 0xFF;
-                                }
-                                // Varm in cold:
-                                else
-                                {
-                                    crt = ((crt + bright) >> 1) & 0xFF;
-                                    cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                                    cbt = (((cbt * 3) + bright) >> 2) & 0xFF;
-                                }
-                            }
-
-                            crt = ((crt * bright) >> 8) & 0xFF;
-                            cgt = ((cgt * bright) >> 8) & 0xFF;
-                            cbt = ((cbt * bright) >> 8) & 0xFF;
-                            tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
-                            
-                            // Add to batch
-                            pixelBatch.emplace_back(nX, nY, tcolor, nZ);
-                            pixelswritten++;
-                        }
-                    }
-                }
+                dntx *= branches[treeinuse][0].scale;
+                dnty *= branches[treeinuse][0].scale;
+                dntz *= branches[treeinuse][0].scale;
             }
-        }
-    }
-
-    // ************************//
-    // * Foliage ******* IFS ! //
-    // ************************//
-    if (logfoliage != 1)
-    {
-        // Coordinate:
-        dtx = xbuf[ui];
-        dty = ybuf[ui];
-        dtz = zbuf[ui];
-
-        // Use shadow map?:
-        if (lockshadow)
-            doshadow = false;
-        else
-            doshadow = true;
-
-        // Do not use normal for foliage:
-        donormal = false;
-
-        // Restore iteration counter:
-        pixelswritten = spixelswritten;
-        shadowswritten = sshadowswritten;
-
-        // Run iterations for foliage
-        for (int batch = 0; batch < 20000; batch++) { // Increased from 20000
-            // IFS-snurran!
-            for (pti = 8; pti >= 0; pti--)
+            // No!, all diffrent:
+            else
             {
-                itersdone++;
-                di = 4 + int(RND * trees[treeinuse].branches);
+                dntx *= branches[treeinuse][i].scale;
+                dnty *= branches[treeinuse][i].scale;
+                dntz *= branches[treeinuse][i].scale;
+            }
 
-                // Translate to scene:
-                xt = dtx + CPOSX;
-                yt = dty + CPOSY;
-                zt = dtz + CPOSZ;
+            // Scale by heigth of branch?
+            if (trees[treeinuse].sctrnsl)
+            {
+                dntx *= branches[treeinuse][i].height;
+                dnty *= branches[treeinuse][i].height;
+                dntz *= branches[treeinuse][i].height;
+            }
 
-                // Save position:
-                tmpx = xt;
-                tmpy = yt;
-                tmpz = zt;
+            // Translate!
+            // Use heights?
+            if (trees[treeinuse].usehig)
+                dnty += trees[treeinuse].height * branches[treeinuse][i].height;
+            // No!, all at top of stem:
+            else
+                dnty += trees[treeinuse].height;
 
-                // Get luminousity & plot in the light's Z-table:
-                IFSlight();
+            // Re-normalize!
+            dntx -= dtx;
+            dnty -= dty;
+            dntz -= dtz;
+            t = sqrt(dntx*dntx + dnty*dnty + dntz*dntz);
+            dntx /= t;
+            dnty /= t;
+            dntz /= t;
 
-                // Translate to scene:
-                xt = dtx + CPOSX;
-                yt = dty + CPOSY;
-                zt = dtz + CPOSZ;
-
-                // Select colour for pixel:
-                crt = dcr;
-                cgt = dcg;
-                cbt = dcb;
-
-                // Rotate to angle of view:
-                rotateview();
-
-                // Clip z:
-                if ((zt > -1.0f) && (zt < 1.0f))
-                {
-                    size = (3.0f + zt) / 2.0f;
-                    nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
-                    zt = (ims * imszoom) / size;
-
-                    nY = BMIDY + int(yt * zt);
-                    nX = BMIDX + int(xt * zt);
-                    
-                    // Clip y:
-                    if ((nY >= 0) && (nY < BHEIGHT))
+            // Color:
+            switch (colourmode)
+            {
+                case FUNKYCOLOURS:
+                    // Diffrent modes for diffrent
+                    // number of branches:
+                    switch (trees[treeinuse].branches - 1)
                     {
-                        // Clip x:
-                        if ((nX >= 0) && (nX < BWIDTH))
-                        {
-                            // Process color
-                            if (overexpose)
-                            {
-                                crt = int((crt + overexpose) / luma);
-                                cgt = int((cgt + overexpose) / luma);
-                                cbt = int((cbt + overexpose) / luma);
-                            }
+                        case 1:
+                            if (i & 0x1)
+                                LoCoSPali += ((PALSIZE - LoCoSPali) >> 1);
+                            else
+                                LoCoSPali >>= 1;
+                        break;
 
-                            // Whiter shade of pale?:
-                            if (whitershade)
-                            {
-                                // Cold in varm:
-                                if (whitershade == 1)
-                                {
-                                    crt = (((crt * 3) + bright) >> 2) & 0xFF;
-                                    cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                                    cbt = ((cbt + bright) >> 1) & 0xFF;
-                                }
-                                // Varm in cold:
-                                else
-                                {
-                                    crt = ((crt + bright) >> 1) & 0xFF;
-                                    cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                                    cbt = (((cbt * 3) + bright) >> 2) & 0xFF;
-                                }
-                            }
+                        case 2:
+                        case 3:
+                            if (i & 0x1)
+                                LoCoSPali += ((PALSIZE - LoCoSPali) >> 1);
+                            else
+                                LoCoSPali >>= 1;
+                            tmp = (PALSIZE >> 1) * ((i >> 1) & 0x01);
+                            LoCoSPali = tmp + (LoCoSPali >> 1);
+                        break;
 
-                            crt = ((crt * bright) >> 8) & 0xFF;
-                            cgt = ((cgt * bright) >> 8) & 0xFF;
-                            cbt = ((cbt * bright) >> 8) & 0xFF;
-                            tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
-                            
-                            // Add to batch
-                            pixelBatch.emplace_back(nX, nY, tcolor, nZ);
-                            pixelswritten++;
-                        }
-                    }
-                }
+                        case 7:
+                        default:
+                            if (i & 0x1)
+                                LoCoSPali += ((PALSIZE - LoCoSPali) >> 1);
+                            else
+                                LoCoSPali >>= 1;
 
-                // **** TRANSFORMATIONS **** //
-                // ** Pixel ** //
-                // Rotations:
-                i = di - 4;
-                // Do twist?:
-                if (trees[treeinuse].usetwst)
-                {
-                    t = branches[treeinuse][i].twistc * dtz - branches[treeinuse][i].twists * dtx;
-                    dtx = branches[treeinuse][i].twistc * dtx + branches[treeinuse][i].twists * dtz;
-                    dtz = t;
-                }
-                // Lean:
-                t = branches[treeinuse][i].leanc * dtx - branches[treeinuse][i].leans * dty;
-                dty = branches[treeinuse][i].leanc * dty + branches[treeinuse][i].leans * dtx;
-                dtx = t;
-                // Rotate:
-                t = branches[treeinuse][i].rotatec * dtz - branches[treeinuse][i].rotates * dtx;
-                dtx = branches[treeinuse][i].rotatec * dtx + branches[treeinuse][i].rotates * dtz;
-                dtz = t;
+                            tmp = (PALSIZE >> 2) * ((i >> 1) & 0x03);
+                            LoCoSPali = tmp + (LoCoSPali >> 2);
+                        break;
+                    } // switch numbranch.
 
-                // Scale!
-                // Global scale?
-                if (trees[treeinuse].glblscl)
-                {
-                    dtx *= branches[treeinuse][0].scale;
-                    dty *= branches[treeinuse][0].scale;
-                    dtz *= branches[treeinuse][0].scale;
-                }
-                // No!, all diffrent:
-                else
-                {
-                    dtx *= branches[treeinuse][i].scale;
-                    dty *= branches[treeinuse][i].scale;
-                    dtz *= branches[treeinuse][i].scale;
-                }
+                    // Get selected colour from palette:
+                    tcolor = lpCols[LoCoSPali];
+                    tRed = (tcolor >> 16) & 0xFF;
+                    tGreen = (tcolor >> 8) & 0xFF;
+                    tBlue = tcolor & 0xFF;
+                    dcr = ((dcr + (tRed * 3)) >> 2) & 0xFF;
+                    dcg = ((dcg + (tGreen * 3)) >> 2) & 0xFF;
+                    dcb = ((dcb + (tBlue * 3)) >> 2) & 0xFF;
+                break; // FUNKYCOLOURS.
 
-                // Scale by heigth of branch?
-                if (trees[treeinuse].sctrnsl)
-                {
-                    dtx *= branches[treeinuse][i].height;
-                    dty *= branches[treeinuse][i].height;
-                    dtz *= branches[treeinuse][i].height;
-                }
+                case NORMALCOLOURS:
+                default:
+                    dcr = ((dcr + (lcr[pti] * 3)) >> 2) & 0xFF;
+                    dcg = ((dcg + (lcg[pti] * 3)) >> 2) & 0xFF;
+                    dcb = ((dcb + (lcb[pti] * 3)) >> 2) & 0xFF;
+                break; // NORMALCOLOURS.
+            } // Switch colourmode.
+        } // End of the iteration loop (the tree L-IFS).
+    } // If logfoliage != 2.
 
-                // Translate!
-                // Use heights?
-                if (trees[treeinuse].usehig)
-                    dty += trees[treeinuse].height * branches[treeinuse][i].height;
-                // No!, all at top of stem:
-                else
-                    dty += trees[treeinuse].height;
-
-                // Color!
-                dcr = ((dcr + tcr[di]) >> 1) & 0xFF;
-                dcg = ((dcg + tcg[di]) >> 1) & 0xFF;
-                dcb = ((dcb + tcb[di]) >> 1) & 0xFF;
-            }
-        }
-    }
-
-    // Save current coordinate:
-    xbuf[ui] = dtx;
-    ybuf[ui] = dty;
-    zbuf[ui] = dtz;
-
-    // Apply all batched pixels at once
-    if (!pixelBatch.empty()) {
-        std::sort(pixelBatch.begin(), pixelBatch.end(), 
-            [](const auto& a, const auto& b) {
-                return std::get<3>(a) > std::get<3>(b); // Sort by Z value (highest/closest first)
-            });
-            
-        // Apply all pixels
-        for (const auto& pixel : pixelBatch) {
-            int x = std::get<0>(pixel);
-            int y = std::get<1>(pixel);
-            uint32_t color = std::get<2>(pixel);
-            int z = std::get<3>(pixel);
-            
-            if (bpict[y][x] < z) {
-                bpict[y][x] = z;
-                pict[y][x] = color;
-            }
-        }
-    }
-
-    // Update screen only ONCE after processing all elements
-    showpic();
-    
     return;
 }
 
 /* --------------------------------------------------------------------- *
-            Make it light
+            Make it light:
+
+          Get luminousity, plot in light scene Z-table.
+
  * --------------------------------------------------------------------- */
 void IFSlight(void)
 {
@@ -1674,7 +1968,13 @@ void IFSlight(void)
 } // IFSlight.
 
 /* --------------------------------------------------------------------- *
-            Make it show
+            Make it show:
+
+            Rotate to scene §, plot to Z-table and pixel-buffer,
+            anti-anilize and plot to screen from pixel-buffer.
+
+                § No translation, just views towards the center here =)
+
  * --------------------------------------------------------------------- */
 void IFSplot(void)
 {
@@ -1810,7 +2110,7 @@ void rotateview(void)
     yt = t;
 
     return;
-} 
+} // rotateview.
 
 /* --------------------------------------------------------------------- *
         Rotate back from view position:
@@ -1925,6 +2225,7 @@ void newsetup(void)
 
     //////////////////////////////
     // *** FRACTAL SETUPS ! *** //
+
     //////////////////////////////
 
     // 2D Sierpinski squares as ground plate:
@@ -2081,7 +2382,9 @@ void randombranch(int indx)
  * --------------------------------------------------------------------- */
 void createbackground(void)
 {
+    // Size of ground square:
     x = grounds[groundsize];
+    // Heihgt: (center as is =)
     t = 0.0f;
 
     // Translation coordinates:
@@ -2122,6 +2425,14 @@ void leafcols(void)
 {
     switch (colourmode)
     {
+        case FUNKYCOLOURS:
+            for (i = 4; i < (ANTAL + 4); i++)
+            {
+                tcr[i] = 0xFF * RND;
+                tcg[i] = 0xFF * RND;
+                tcb[i] = 0xFF * RND;
+            }
+        break; // FUNKYCOLOURS.
         case NORMALCOLOURS:
         default:
             for (i = 4; i < (ANTAL + 4); i++)
@@ -2131,8 +2442,8 @@ void leafcols(void)
                 tcb[i] = 0x20 + 32 * RND;
             }
         break; // NORMALCOLOURS.
-    }
-}
+    } // Switch colourmode.
+} // leafcols.
 
 /* --------------------------------------------------------------------- *
         Set-up colours for the stem:
@@ -2258,8 +2569,21 @@ void manual(void)
     drawText(tmp, 398, "you do not like the current set of colours, then simply press [P] until random finds a set you like.", r, g, b);
     drawText(tmp, 550, "This program is part of the public domain, (PD), distribute and make copys freely.", r, g, b);
 
+    spacemess();
+
     return;
 } // manual.
+
+/* --------------------------------------------------------------------- *
+        Press [V] to clear view message:
+ * --------------------------------------------------------------------- */
+void clearViewmess(void)
+{
+    float r, g, b;
+    unpackColor(txcol[showbackground], &r, &g, &b);
+    drawText(360, 2, "Press [V] to clear view.", r, g, b);
+    return;
+} // clearViewmess.
 
 /* --------------------------------------------------------------------- *
         View foliage coloursation:
@@ -2434,7 +2758,9 @@ void drawText(float x, float y, const char *text, float r, float g, float b) {
 }
 
 /* --------------------------------------------------------------------- *
-        Clean the screen" =)
+        Down and below: "los graphicos"!
+
+            First: "clean the screen" =)
  * --------------------------------------------------------------------- */
 void clearscreen(uint32_t RGBdata)
 {
@@ -2446,7 +2772,7 @@ void clearscreen(uint32_t RGBdata)
 }
 
 /* --------------------------------------------------------------------- *
-        Picture this:
+        picture this:
  * --------------------------------------------------------------------- */
 void showpic(void)
 {

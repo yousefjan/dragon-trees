@@ -1,19 +1,19 @@
 
 	// This struct holds all parameters possible for one tree:
  	struct ATREE {	char name [ 16 ];
-                  int branches;
-                  bool usehig;
-                  bool glblscl;
-                  bool sctrnsl;
-                  bool usetwst;
-                  long double	radius;
-                  long double	height;
-                  long double	height0;
-                  long double	scale0;
-                  long double leanc0;
-                  long double rotatec0;
-                  long double leans0;
-                  long double rotates0;
+  					int branches;
+  					bool usehig;
+  					bool glblscl;
+  					bool sctrnsl;
+  					bool usetwst;
+					long double	radius;
+					long double	height;
+  	  	            long double	height0;
+	      	        long double	scale0;
+                    long double leanc0;
+                    long double rotatec0;
+                    long double leans0;
+                    long double rotates0;
                   long double twistc0;
                   long double twists0;
                   long double height1;

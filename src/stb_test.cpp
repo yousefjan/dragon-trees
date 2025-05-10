@@ -94,6 +94,3 @@ int main(int argc, char** argv) {
     glfwTerminate();
     return 0;
 }
-
-
-// g++ -I/opt/homebrew/include -L/opt/homebrew/lib -lGLEW -lglfw -framework OpenGL stb_test.cpp

@@ -10,8 +10,8 @@
 #define PALSIZE	8192	// *** Always 2 ^ int ( |n| ) ***
 
 // Screen, pixel & Z-buffer sizes:
-#define WIDTH		( 800 )
-#define HEIGHT	( 600 )
+#define WIDTH		( 1920 )
+#define HEIGHT	( 1080 )
 #define MIDX		( WIDTH>>1 )
 #define MIDY		( HEIGHT>>1 )
 #define BWIDTH	( WIDTH<<1 )
@@ -25,6 +25,7 @@
 
 //// IFS! IFS!! IFS!!! ////
 #define ANTAL		8
+#define MAX_FRUITS 100
 
 // Palette displaymodes:
 #define SERP		( 1 )
@@ -111,6 +112,15 @@ struct DTIFS {
   DTBRA branch_7;
 };
 
+typedef struct {
+  float x, y, z; 
+  float radius; 
+} Fruit;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void CamAng(void);
 void clearallbufs(uint32_t RGBdata);
 void clearscreen(uint32_t RGBdata);
@@ -133,7 +143,7 @@ void leafcols(void);
 void LitAng(void);
 void loadtrees(void);
 void loadtree(void);
-void manual(void);
+// void manual(void);
 void newrender(void);
 void newsetup(void);
 void setupQuad(void);
@@ -144,7 +154,7 @@ void printtreeinfo(void);
 void randombranch(int indx);
 void rotatelight(void);
 void rotateview(void);
-int SGN(double x);
+int sign(double x);
 void ShowPalette(int mode);
 void showpic(void);
 void spacemess(void);
@@ -167,3 +177,24 @@ GLuint loadTexture(const std::vector<unsigned char>& data, int width, int height
 void renderText(const char* text, float x, float y, float scale, uint32_t color);
 void drawText(float x, float y, const char* text, float r, float g, float b);
 void unpackColor(unsigned int col, float *r, float *g, float *b);
+uint32_t* getPixelBufferPtr();
+void simulateKeyPress(int key);
+
+#ifdef __cplusplus
+}
+#endif
+
+
+// void drawText(float x, float y, const char *text, float r, float g, float b) {
+//   static char buffer[9999];
+  
+//   glColor4f(r, g, b, 1.0);
+  
+//   int num_quads = stb_easy_font_print(x, y, (char*)text, NULL, buffer, sizeof(buffer));
+//   // printf("Drawing text '%s' at (%.1f, %.1f) with %d quads\n", text, x, y, num_quads);
+  
+//   glEnableClientState(GL_VERTEX_ARRAY);
+//   glVertexPointer(2, GL_FLOAT, 16, buffer); // 16 bytes per vertex
+//   glDrawArrays(GL_QUADS, 0, num_quads * 4); // 4 vertices per quad
+//   glDisableClientState(GL_VERTEX_ARRAY);
+// }

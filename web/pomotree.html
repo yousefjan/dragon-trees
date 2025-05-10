@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pomotree</title>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="pomotree.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <div class="left-column">
+            <div class="timer-controls">
+                <button id="pomodoroButton" class="pomo-button">Pomodoro</button>
+                <button id="breakButton" class="pomo-button">Break</button>
+            </div>
+
+            <div id="taskListContainer" class="task-container">
+                <div class="task-header">
+                    <span id="taskDateDisplay"></span>
+                    <!-- <button id="toggleTasksButton" class="toggle-button">v</button> -->
+                </div>
+                <ul id="taskList" class="task-list">
+                    </ul>
+                <div class="total-pomos">
+                    Total Focus Sessions: <span id="totalPomosToday">0</span>
+                    <div id="totalTaskTimeDisplay"></div>
+                </div>
+                <div class="add-task-area">
+                    <input type="text" id="newTaskInput" placeholder="Add a new task...">
+                    <input type="number" id="pomoCountInput" min="1" value="1" placeholder="Pomos">
+                    <button id="addTaskButton" class="add-button">+</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-column">
+            <div class="top-bar">
+                <div class="time-display">
+                    <div id="dateTimeDisplay"></div>
+                    <div id="timerDisplay" class="timer-status"></div>
+                </div>
+                <div class="settings-control">
+                    <button id="settingsButton" class="settings-button">Settings</button>
+                </div>
+            </div>
+        </div>
+
+    </div> <div id="modalOverlay" class="modal-overlay hidden"></div>
+    <div id="settingsModal" class="settings-modal hidden">
+        <h2 class="modal-title">Settings</h2>
+
+        <div class="setting-item">
+            <label for="pomoDuration">Pomodoro Duration (min):</label>
+            <input type="number" id="pomoDuration" min="1" value="25">
+        </div>
+
+        <div class="setting-item">
+            <label for="breakDuration">Break Duration (min):</label>
+            <input type="number" id="breakDuration" min="1" value="5">
+        </div>
+
+         <div class="setting-item">
+            <label for="startTime">Start Pomodoro at:</label>
+            <div>
+                <input type="time" id="startTime">
+                <button id="setStartTimeButton" class="pomo-button">Set</button>
+                <button id="clearStartTimeButton" class="pomo-button">Clear</button>
+            </div>
+            <p id="startTimeMessage" class="setting-message"></p>
+        </div>
+
+        <hr class="separator">
+
+        <h3 class="modal-subtitle">Premium Features</h3>
+        <p class="premium-note">(Requires Premium Account)</p>
+
+        <div class="premium-feature">
+            <button disabled>Remove Ads.</button>
+        </div>
+        <div class="premium-feature">
+            <button disabled>Sync with Apple and/or Google Calendar.</button>
+        </div>
+         <div class="premium-feature">
+            <button disabled>Manually set future tasks</button>
+        </div>
+        <div class="premium-feature">
+            <button disabled>Set a different sky.</button>
+        </div>
+        <div class="premium-feature">
+            <button disabled>Set a different tree.</button>
+        </div>
+        <div class="modal-close-area">
+            <button id="closeSettingsButton" class="settings-button">Close</button>
+        </div>
+    </div>
+
+    <div id="messageBox" class="message-box hidden">
+        <p id="messageText"></p>
+        <div id="messageBoxButtons">
+             <button id="messageCloseButton">OK</button>
+             </div>
+    </div>
+
+    <script src="pomotree.js"></script>
+</body>
+</html>

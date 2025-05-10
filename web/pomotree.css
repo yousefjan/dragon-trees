@@ -1,0 +1,501 @@
+/* Basic Reset & Font */
+body, html {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Calibri', monospace;
+    color: white;
+    font-size: 14px; /* Base font size */
+    /* Set a placeholder background - REPLACE with your generated image */
+    background: url('example.png') no-repeat center center fixed;
+    background-size: cover;
+    height: 100vh;
+    overflow: hidden; /* Prevent body scrollbars */
+}
+
+*, *:before, *:after {
+    box-sizing: inherit;
+}
+
+/* Layout Container */
+.app-container {
+    display: flex;
+    height: 100vh;
+    padding: 15px; /* Padding around the whole app */
+}
+
+.left-column {
+    display: flex;
+    flex-direction: column;
+    padding-right: 20px; /* Space between columns */
+    width: 280px; /* Fixed width for the left column */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.right-column {
+    flex-grow: 1; /* Takes remaining space */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Top Bar Elements */
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start; /* Align items to the top */
+    width: 100%;
+    margin-bottom: 20px; /* Space below the top bar */
+}
+
+.time-display {
+    text-align: center;
+    flex-grow: 1; /* Allow it to take space */
+    padding: 0 20px; /* Add padding so it doesn't touch edges */
+}
+
+.timer-status {
+    margin-top: 5px;
+}
+
+.settings-control {
+    /* Aligns settings button to the right */
+}
+
+
+/* Buttons */
+button, .pomo-button { /* Apply base button styles also to labels styled as buttons */
+    background-color: transparent;
+    color: white;
+    border: 1px solid white;
+    padding: 3px 9px;
+    margin: 0 4px;
+    cursor: pointer;
+    font-family: inherit; /* Use body font */
+    font-size: inherit;
+    transition: background-color 0.2s ease;
+    border-radius: 4px; /* Slightly rounded corners */
+    display: inline-block; /* Ensure consistent display */
+    text-align: center; /* Center text */
+    vertical-align: middle; /* Align vertically */
+}
+
+button:hover:not(:disabled),
+.pomo-button:not([disabled]):hover { /* Hover effect for enabled buttons/labels */
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+button:disabled,
+.pomo-button[disabled] { /* Disabled state for buttons and labels */
+    color: #a0aec0; /* Greyish color for disabled */
+    border-color: #a0aec0;
+    cursor: not-allowed;
+    background-color: transparent !important; /* Ensure no background on hover when disabled */
+}
+
+.pomo-button.active {
+    background-color: rgba(255, 255, 255, 0.3);
+    font-weight: bold;
+}
+
+.settings-button {
+    /* Inherits from button/.pomo-button, specific if needed */
+}
+
+.add-button {
+    padding: 3px 8px;
+    margin-left: 5px;
+    font-size: 1.2em; /* Make '+' slightly larger */
+    line-height: 1;
+}
+
+.delete-button {
+    background: none;
+    border: none;
+    color: #ff8a8a; /* Reddish color for delete */
+    cursor: pointer;
+    margin-left: 8px;
+    padding: 0 4px;
+    font-weight: bold;
+    display: inline-block; /* Ensure proper alignment */
+    vertical-align: middle;
+}
+.delete-button:hover {
+    color: #ff4d4d;
+    background: none;
+}
+
+
+/* Task List Area */
+.task-container {
+    margin-top: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.5); /* Optional border */
+    padding: 10px;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.2); /* Slight background */
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1; /* Allow task list to take available space */
+    overflow-y: auto; /* Add scroll if tasks overflow */
+    max-height: calc(50vh - 150px);
+}
+
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* .toggle-button {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    padding: 0;
+    line-height: 1;
+} */
+
+.task-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1; /* Allow list to take space */
+     overflow-y: auto; /* Scroll within the list if needed */
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+    padding: 4px;
+    border: 1px solid transparent; /* Placeholder for selection border */
+    border-radius: 4px;
+    cursor: pointer; /* Indicate tasks are selectable */
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.task-item:hover {
+     background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Selected Task ("In Progress") */
+.task-item.selected-task {
+    border-color: white;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.task-item input[type="checkbox"] {
+    margin-right: 8px;
+    appearance: none; /* Remove default checkbox */
+    border: 1px solid white;
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    position: relative;
+    top: 1px; /* Align with text */
+    flex-shrink: 0; /* Prevent checkbox shrinking */
+    vertical-align: middle; /* Align vertically */
+}
+
+.task-item input[type="checkbox"]:checked {
+    background-color: white;
+}
+
+.task-item span.task-name {
+    flex-grow: 1; /* Allow task name to take available space */
+    margin-right: 8px; /* Space before pomos count */
+    overflow: hidden; /* Prevent long names breaking layout */
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Completed Task */
+.task-item.completed span.task-name {
+    text-decoration: line-through;
+    color: #a0aec0; /* Grey out completed task text */
+}
+.task-item.completed {
+    opacity: 0.7;
+}
+
+
+.task-item span.pomos-count {
+    font-size: 0.9em;
+    color: #ccc; /* Lighter color for pomos count */
+    white-space: nowrap; /* Prevent wrapping */
+}
+
+.add-task-area {
+    display: flex;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    align-items: center;
+    gap: 8px; /* Adds consistent spacing between elements */
+}
+
+.add-task-area input[type="text"] {
+    flex-grow: 1;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid white;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.add-task-area input[type="number"] {
+    width: 80px; /* Set a reasonable width for the pomodoro count input */
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid white;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: inherit;
+    text-align: center;
+}
+
+.add-task-area input::placeholder {
+    color: #ccc;
+    opacity: 0.8;
+}
+
+.add-task-area .add-button {
+    padding: 3px 8px;
+    font-size: 1.2em;
+    line-height: 1;
+    height: 28px; /* Match the height of the inputs for alignment */
+    width: 28px; /* Make it square */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Style the number input arrows */
+.add-task-area input[type="number"]::-webkit-inner-spin-button,
+.add-task-area input[type="number"]::-webkit-outer-spin-button {
+    opacity: 0.8;
+    height: 20px;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* For Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.1);
+}
+
+/* Apply scrollbar to task container and other scrollable areas */
+.task-container,
+.task-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.1);
+}
+
+.total-pomos {
+    margin-top: 10px;
+    text-align: right;
+    font-size: 0.9em;
+    color: #ccc;
+}
+
+/* Settings Modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 40;
+}
+
+.settings-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8); /* Darker, more opaque */
+    backdrop-filter: blur(4px);
+    border: 1px solid white;
+    border-radius: 8px;
+    padding: 20px 25px;
+    width: 90%;
+    max-width: 400px; /* Max width */
+    z-index: 50;
+    color: white;
+}
+
+.settings-modal.hidden,
+.modal-overlay.hidden {
+    display: none;
+}
+
+.modal-title {
+    text-align: center;
+    font-size: 1.2em;
+    margin-bottom: 20px;
+    font-weight: bold;
+}
+
+.modal-subtitle {
+     text-align: center;
+     font-size: 1.1em;
+     margin-bottom: 5px;
+     font-weight: bold;
+}
+
+.setting-item {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column; /* Stack label and input */
+}
+.setting-item label {
+    margin-bottom: 5px;
+}
+.setting-item input[type="number"],
+.setting-item input[type="time"] {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid white;
+    color: white;
+    padding: 5px 8px;
+    border-radius: 4px;
+    width: 80px; /* Adjust width */
+    text-align: center;
+    font-family: inherit;
+}
+.setting-item input[type="time"] {
+    width: 120px; /* Wider for time */
+}
+.setting-item div { /* Container for time input + buttons */
+    display: flex;
+    align-items: center;
+}
+.setting-item div button {
+    margin-left: 5px;
+}
+
+.setting-message {
+    font-size: 0.85em;
+    margin-top: 5px;
+    color: #ccc;
+}
+
+.separator {
+    border: none;
+    border-top: 1px solid #555;
+    margin: 20px 0;
+}
+
+.premium-note {
+    text-align: center;
+    font-size: 0.85em;
+    color: #a0aec0;
+    margin-bottom: 15px;
+}
+
+.premium-feature {
+    margin-bottom: 10px;
+}
+/* Style premium buttons/labels */
+.premium-feature button,
+.premium-feature .pomo-button { /* Target both button and styled label */
+    width: 100%;
+    text-align: left;
+}
+
+/* Ensure the file upload label looks like other buttons */
+.file-upload-label {
+    /* Inherits most styles from .pomo-button */
+    display: inline-block; /* Override potential block display */
+    width: 100%; /* Make it full width like other premium buttons */
+    text-align: left; /* Align text left like other premium buttons */
+}
+
+
+.hidden-file-input {
+    display: none; /* Hide actual file input */
+}
+
+.modal-close-area {
+    text-align: center;
+    margin-top: 25px;
+}
+
+/* Message Box */
+.message-box {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 15px 25px;
+    border: 1px solid white;
+    border-radius: 8px;
+    z-index: 1000;
+    text-align: center;
+    min-width: 250px;
+    max-width: 90%;
+}
+.message-box.hidden {
+    display: none;
+}
+#messageBoxButtons {
+    margin-top: 15px;
+}
+#messageBoxButtons button {
+    margin: 0 5px; /* Space between buttons */
+}
+
+/* Utility */
+.hidden {
+    display: none !important; /* Force hide */
+}
+
+/* Tree viz */
+.tree-visualization-area {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+#treeCanvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* For text hiding when mouse leaves window */
+.text-hidden * {
+    color: transparent !important;
+    text-shadow: none !important;
+}
+
+/* For disabled date navigation buttons */
+.date-nav {
+    cursor: pointer;
+    margin: 0 5px;
+}
+.date-nav.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

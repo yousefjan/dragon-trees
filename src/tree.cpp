@@ -16,6 +16,12 @@
 #define STB_EASY_FONT_IMPLEMENTATION
 #include "stb_easy_font.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#else
+#define EMSCRIPTEN_KEEPALIVE
+#endif
+
 #include "utils.h"
 #include "atree.h"
 
@@ -63,7 +69,7 @@ int r;
 
 //**** Four dimensions: ****
 
-// Variable + temp dito:
+// Variable + temp ditto:
 double x, tmpx;
 double y, tmpy;
 double z, tmpz;
@@ -98,15 +104,11 @@ int bpict[BHEIGHT][BWIDTH];                    // Z-buffer for picture, max valu
 int light[LHEIGHT][LWIDTH];                    // Z-buffer for shadows, max value = ZDEPTH.
 uint32_t lpCols[PALSIZE];                      // Buffer for colour palette.
 
-// Used for writing lines:
+// Used in drawText:
 int lixs, liys, lixe, liye;
 uint32_t lcol;
 double lxs, lys, lxe, lye;
 double RATIO, RERAT;
-
-// Variable to store the background colour -
-//(initiate to default):
-uint32_t bgcolor = 0x00103050;
 
 // Flag if a new set is to be rendered:
 bool newset = false;
@@ -132,23 +134,23 @@ const char* textbrmess[8] = {
 
 // Background mode, text, colours and text colours:
 const char* textbgmess[5] = {
-    "On skyblue",
-    "On blue",
-    "On black",
-    "Off black",
-    "Off white"
+    "Plane + black",
+    "Plane + skyblue",
+    "Plane + blue",
+    "Off plane + black",
+    "Off plane + white"
 };
 
-// note: RGB
+// note: ABGR
 uint32_t bgcol[5] = {
-    0x006080C0,
-    0x00103050,
     0x00000000,
+    0x00A96E0A,
+    0x00A96E0A,
     0x00000000,
     0x00FFFFFF
 };
 
-// note: BGR for original, but RGB for OpenGL
+// note: ABGR
 uint32_t txcol[5] = {
     0x00FFFF40,
     0x00FFFF80,
@@ -181,6 +183,11 @@ const char* textpales[3] = {
     "Normal (sunspot)",
     "Flourescent (moonspot)",
     "Filament (noonspot)"
+};
+
+const char* textfunky[2] = {
+    "FUNKYCOLOURS off",
+    "FUNKYCOLOURS on"
 };
 
 // Temporary string buffer:
@@ -298,11 +305,12 @@ int nCols;
 double xbuf[10];
 double ybuf[10];
 double zbuf[10];
+
 // Index for buffer:
 int ui = 9;
 
 // Number of levels used
-short int ilevels = 4;
+short int ilevels = 3;
 
 // Number of branches selected:
 int numbranch;
@@ -349,13 +357,64 @@ ATREE tree[NUMTREES];
 bool keyStates[512]; // More than enough for all GLFW keys
 bool keyPressed[512]; // To track if a key was just pressed this frame
 
-int SGN(double x)
+// Fast Inverse Square Root function
+float Q_rsqrt(float number) {
+    static_assert(sizeof(float) == 4, "Q_rsqrt requires 32-bit float"); // Ensure float is 32-bit
+    static_assert(sizeof(uint32_t) == 4, "Q_rsqrt requires 32-bit uint32_t"); // Ensure uint32_t is 32-bit
+
+    // Handle zero or negative input to avoid undefined behavior / NaNs
+    if (number <= 1e-9f) { // Use a small epsilon
+        // Return a large number to effectively make the resulting vector zero after multiplication,
+        // or handle it differently if zero-length vectors have specific meaning.
+        // Alternatively, you could return 0.0f if you handle the normalization check externally.
+        // Returning infinity might cause issues later. Let's return 0 for now,
+        // assuming the caller checks. A better approach is shown in the usage example below.
+        return 0.0f;
+    }
+
+    uint32_t i;
+    float x2, y;
+    const float threehalfs = 1.5f;
+
+    x2 = number * 0.5f;
+    y = number;
+
+    // Evil floating point bit level hacking
+    std::memcpy(&i, &y, sizeof(float)); // Use memcpy for type punning, avoids strict-aliasing issues
+    i = 0x5f3759df - (i >> 1);      // What the...? Magic constant
+    std::memcpy(&y, &i, sizeof(float));
+
+    y = y * (threehalfs - (x2 * y * y)); // 1st iteration Newton-Raphson
+    // y = y * ( threehalfs - ( x2 * y * y ) ); // 2nd iteration (optional, improves accuracy but costs performance)
+
+    return y;
+}
+
+
+int sign(double x)
 {
     if (x < 0.0f)
         return (-1);
     else
         return (1);
-} // SGN.
+} // sign.
+
+
+uint32_t* getPixelBufferPtr() {
+    return pixelBuffer;
+}
+
+void simulateKeyPress(int key) {
+    if (key == 114) { // ASCII for 'R'
+        treeinuse = 31;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            writecols();
+            clearViewmess();
+    }
+}
 
 /* --------------------------------------------------------------------- *
             GLFW error callback
@@ -386,7 +445,371 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
  * --------------------------------------------------------------------- */
 void processInput(void)
 {
-    if (programMode == 0) {
+    if (programMode == 0 && renderactive) {
+        // Render screen keys
+        
+        // ESC key
+        if (keyPressed[GLFW_KEY_ESCAPE]) {
+            renderactive = false;
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
+        
+        // SPACE key
+        if (keyPressed[GLFW_KEY_SPACE]) {
+            renderactive = false;
+            programMode = 1;
+        }
+        
+        // PAGE_UP key
+        if (keyPressed[GLFW_KEY_PAGE_UP]) {
+            imszoom *= twup;
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // PAGE_DOWN key
+        if (keyPressed[GLFW_KEY_PAGE_DOWN]) {
+            imszoom *= twdwn;
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // HOME key
+        if (keyPressed[GLFW_KEY_HOME]) {
+            ryv = 0.0f * rad;
+            rxv = 0.0f * rad;
+            CamAng();
+            imszoom = 1.0f;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // Arrow keys
+        if (keyPressed[GLFW_KEY_UP]) {
+            rxv += 0.01f;
+            if (int(rxv) > 180)
+                rxv = 180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_RIGHT]) {
+            ryv += 0.01f;
+            if (int(ryv) > 180)
+                ryv = 180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_DOWN]) {
+            rxv -= 0.01f;
+            if (int(rxv) < -180)
+                rxv = -180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_LEFT]) {
+            ryv -= 0.01f;
+            if (int(ryv) < -180)
+                ryv = -180.0f;
+            CamAng();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        // F1-F4 keys
+        if (keyPressed[GLFW_KEY_F1]) {
+            trees[treeinuse].usehig = (trees[treeinuse].usehig + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_F2]) {
+            trees[treeinuse].glblscl = (trees[treeinuse].glblscl + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_F3]) {
+            trees[treeinuse].sctrnsl = (trees[treeinuse].sctrnsl + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_F4]) {
+            trees[treeinuse].usetwst = (trees[treeinuse].usetwst + 1) & 0x01;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            
+        }
+        
+        // Number keys 1-8
+        if (keyPressed[GLFW_KEY_1] || keyPressed[GLFW_KEY_2] || keyPressed[GLFW_KEY_3] || 
+            keyPressed[GLFW_KEY_4] || keyPressed[GLFW_KEY_5] || keyPressed[GLFW_KEY_6] || 
+            keyPressed[GLFW_KEY_7] || keyPressed[GLFW_KEY_8]) {
+            
+            int numKey = 0;
+            if (keyPressed[GLFW_KEY_1]) numKey = 0;
+            else if (keyPressed[GLFW_KEY_2]) numKey = 1;
+            else if (keyPressed[GLFW_KEY_3]) numKey = 2;
+            else if (keyPressed[GLFW_KEY_4]) numKey = 3;
+            else if (keyPressed[GLFW_KEY_5]) numKey = 4;
+            else if (keyPressed[GLFW_KEY_6]) numKey = 5;
+            else if (keyPressed[GLFW_KEY_7]) numKey = 6;
+            else if (keyPressed[GLFW_KEY_8]) numKey = 7;
+            
+            randombranch(numKey);
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            writecols();
+            clearViewmess();
+            
+        }
+        
+        // Alphabet keys
+        if (keyPressed[GLFW_KEY_A]) {
+            ryv = -180.0f * rad + RND * 360.0f * rad;
+            ryx = cos(ryv);
+            ryy = sin(ryv);
+            rxv = -10.0f * rad + RND * 100.0f * rad;
+            rxx = cos(rxv);
+            rxy = sin(rxv);
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_B]) {
+            showbackground++;
+            if (showbackground > 4)
+                showbackground = 0;
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            writecols();
+            clearViewmess();
+        }
+        
+        if (keyPressed[GLFW_KEY_C]) {
+            clearscreenbufs(bgcol[showbackground]);
+            trees[treeinuse].radius *= sqrt(twup);
+        }
+        
+        if (keyPressed[GLFW_KEY_D]) {
+            trees[treeinuse].radius *= twup;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_E]) {
+            if (++logfoliage >= 3)
+                logfoliage = 0;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+            if (logfoliage != 1)
+                writecols();
+        }
+        
+        if (keyPressed[GLFW_KEY_F]) {
+            trees[treeinuse].radius *= twdwn;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_G]) {
+            groundsize++;
+            if (groundsize > 2)
+                groundsize = 0;
+            createbackground();
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+        }
+        
+        if (keyPressed[GLFW_KEY_I]) {
+            printsceneinfo();
+            lcol = txcol[showbackground];
+            pixelsmess();
+            printtreeinfo();
+            writecols();
+            if (colourmode)
+                ShowPalette(ABSZ);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_K]) {
+            if (!lockshadow)
+                lockshadow = true;
+            trees[treeinuse].radius *= sqrt(twup);
+            clearscreenbufs(bgcol[showbackground]);
+        }
+        
+        if (keyPressed[GLFW_KEY_L]) {
+            lightness++;
+            if (lightness > 1)
+                lightness = 0;
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+        }
+        
+        if (keyPressed[GLFW_KEY_M]) {
+            if (++treeinuse >= NUMTREES)
+                treeinuse = 0;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printtreeinfo();
+            printsceneinfo();
+            writecols();
+        }
+        
+        if (keyPressed[GLFW_KEY_N]) {
+            if (++selnumbranch > 7)
+                selnumbranch = 0;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printtreeinfo();
+            printsceneinfo();
+            writecols();
+        }
+        
+        if (keyPressed[GLFW_KEY_O]) {
+            clearscreen(bgcol[showbackground]);
+            if (++colourmode > 1)
+                colourmode = 0;
+            if (colourmode) {
+                CreatePalette();
+                ShowPalette(ABSZ);
+            }
+            stemcols();
+            leafcols();
+            printsceneinfo();
+            newrender();
+            writecols();
+            clearViewmess();
+            clearscreenbufs(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_P]) {
+            clearscreen(bgcol[showbackground]);
+            if (colourmode) {
+                CreatePalette();
+                ShowPalette(ABSZ);
+            }
+            stemcols();
+            leafcols();
+            printsceneinfo();
+            newrender();
+            writecols();
+            clearViewmess();
+            clearscreenbufs(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_R]) {
+            treeinuse = 31;
+            newsetup();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            printtreeinfo();
+            writecols();
+            clearViewmess();
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_S]) {
+            trees[treeinuse].height *= twdwn;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_T]) {
+            FILLBOX(0, 0, WIDTH, HEIGHT, 0x00FFFFFF);
+            
+            lcol = 0x00000080;
+            pixelsmess();
+        }
+        
+        if (keyPressed[GLFW_KEY_U]) {
+            if (++useLoCoS >= 3)
+                useLoCoS = 0;
+            else
+                trees[treeinuse].radius = fabs(trees[treeinuse].height / 2.0f);
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+        
+        if (keyPressed[GLFW_KEY_V]) {
+            showpic();
+        }
+        
+        if (keyPressed[GLFW_KEY_W]) {
+            whitershade++;
+            if (whitershade > 2)
+                whitershade = 0;
+            newrender();
+            clearscreenbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+            printsceneinfo();
+        }
+        
+        if (keyPressed[GLFW_KEY_X]) {
+            trees[treeinuse].height *= twup;
+            newrender();
+            clearallbufs(bgcol[showbackground]);
+            clearscreen(bgcol[showbackground]);
+            
+        }
+    } else if (programMode == 1) {
+        // Info screen keys
+        // printf("Info screen program mode = 1\n");
         
         // ESC key
         if (keyPressed[GLFW_KEY_ESCAPE]) {
@@ -536,6 +959,11 @@ void processInput(void)
     for (int i = 0; i < 512; i++) {
         keyPressed[i] = false;
     }
+    
+    // Reset key pressed state for next frame
+    for (int i = 0; i < 512; i++) {
+        keyPressed[i] = false;
+    }
 }
 
 /* --------------------------------------------------------------------- *
@@ -550,25 +978,18 @@ int main(int argc, char** argv)
     // Setup fonts and fractal functions
     initiateIFS();
     
-        
     // Main loop
-    // printf("Start main loop...\n");
     while (!glfwWindowShouldClose(window)) {
         // Process input
         processInput();
-        // printf("Processed input\n");
         // programMode = 0;
         showpic();
         newrender();
 
 
         if (programMode == 0 && renderactive) {
-            // printf("Rendering...\n");
             DoMyStuff();
-        }
-        
-        // Render
-        if (programMode == 0) {
+
             // Copy & anti-alias from pixel-buffer to screen
             showpic();
             
@@ -578,30 +999,23 @@ int main(int argc, char** argv)
                 newset = false;
                 // Then - again!
                 showpic();
-            }
-            
-            // "tag" screen
-            
+            }            
         }
+        
         else if (programMode == 1) {
             // View info screen
             // printf("Viewing info screen...\n");
-            manual();
+            // manual();
         }
         
         // Render to screen
-        // printf("Rendering to screen...\n");
         renderToTexture();
-        // printf("Draw screen texture...\n");
         drawScreenTexture();
         
-        // Swap buffers and poll events
         glfwSwapBuffers(window);
         glfwPollEvents();
-        // printf("Swapped buffers and polled events\n");
     }
     
-    // Cleanup
     finiObjects();
     glfwTerminate();
     
@@ -1003,7 +1417,7 @@ void DoMyStuff(void)
             doshadow = true;
 
         // Use normal for stem and branches:
-        donormal = false; // was true
+        donormal = true; // was true
 
         // Restore iteration counter:
         pixelswritten = spixelswritten;
@@ -1011,8 +1425,31 @@ void DoMyStuff(void)
 
         // printf("%i\n", ilevels);
 
+        // Precalculate and cache branch transform data
+        struct BranchTransform {
+            float twistc, twists, leanc, leans, rotatec, rotates;
+            float scale, height;
+        };
+
+        std::vector<BranchTransform> cachedBranchTransforms;
+        cachedBranchTransforms.resize(trees[treeinuse].branches);
+
+        for (int i = 0; i < trees[treeinuse].branches; i++) {
+            // Explicitly cast each value to float, or add 'f' suffix to literals
+            cachedBranchTransforms[i] = {
+                static_cast<float>(branches[treeinuse][i].twistc),
+                static_cast<float>(branches[treeinuse][i].twists),
+                static_cast<float>(branches[treeinuse][i].leanc),
+                static_cast<float>(branches[treeinuse][i].leans),
+                static_cast<float>(branches[treeinuse][i].rotatec),
+                static_cast<float>(branches[treeinuse][i].rotates),
+                static_cast<float>(branches[treeinuse][i].scale),
+                static_cast<float>(branches[treeinuse][i].height)
+            };
+        }
+
         // Process iterations for branches and stem
-        for (int batch = 0; batch < 100; batch++) {
+        for (int batch = 0; batch < 20000; batch++) {
             // IFS-snurran!
             for (pti = (ilevels - 1); pti >= 0; pti--)
             {
@@ -1107,17 +1544,17 @@ void DoMyStuff(void)
                 // Twist:
                 if (trees[treeinuse].usetwst)
                 {
-                    t = branches[treeinuse][i].twistc * dtz - branches[treeinuse][i].twists * dtx;
-                    dtx = branches[treeinuse][i].twistc * dtx + branches[treeinuse][i].twists * dtz;
+                    t = cachedBranchTransforms[i].twistc * dtz - cachedBranchTransforms[i].twists * dtx;
+                    dtx = cachedBranchTransforms[i].twistc * dtx + cachedBranchTransforms[i].twists * dtz;
                     dtz = t;
                 }
                 // Lean:
-                t = branches[treeinuse][i].leanc * dtx - branches[treeinuse][i].leans * dty;
-                dty = branches[treeinuse][i].leanc * dty + branches[treeinuse][i].leans * dtx;
+                t = cachedBranchTransforms[i].leanc * dtx - cachedBranchTransforms[i].leans * dty;
+                dty = cachedBranchTransforms[i].leanc * dty + cachedBranchTransforms[i].leans * dtx;
                 dtx = t;
                 // Rotate:
-                t = branches[treeinuse][i].rotatec * dtz - branches[treeinuse][i].rotates * dtx;
-                dtx = branches[treeinuse][i].rotatec * dtx + branches[treeinuse][i].rotates * dtz;
+                t = cachedBranchTransforms[i].rotatec * dtz - cachedBranchTransforms[i].rotates * dtx;
+                dtx = cachedBranchTransforms[i].rotatec * dtx + cachedBranchTransforms[i].rotates * dtz;
                 dtz = t;
 
                 // Scale!
@@ -1131,23 +1568,23 @@ void DoMyStuff(void)
                 // No!, all diffrent:
                 else
                 {
-                    dtx *= branches[treeinuse][i].scale;
-                    dty *= branches[treeinuse][i].scale;
-                    dtz *= branches[treeinuse][i].scale;
+                    dtx *= cachedBranchTransforms[i].scale;
+                    dty *= cachedBranchTransforms[i].scale;
+                    dtz *= cachedBranchTransforms[i].scale;
                 }
 
                 // Scale by heigth of branch?
                 if (trees[treeinuse].sctrnsl)
                 {
-                    dtx *= branches[treeinuse][i].height;
-                    dty *= branches[treeinuse][i].height;
-                    dtz *= branches[treeinuse][i].height;
+                    dtx *= cachedBranchTransforms[i].height;
+                    dty *= cachedBranchTransforms[i].height;
+                    dtz *= cachedBranchTransforms[i].height;
                 }
 
                 // Translate!
                 // Use heights?
                 if (trees[treeinuse].usehig)
-                    dty += trees[treeinuse].height * branches[treeinuse][i].height;
+                    dty += trees[treeinuse].height * cachedBranchTransforms[i].height;
                 // No!, all at top of stem:
                 else
                     dty += trees[treeinuse].height;
@@ -1157,17 +1594,17 @@ void DoMyStuff(void)
                 // Do twist?:
                 if (trees[treeinuse].usetwst)
                 {
-                    t = branches[treeinuse][i].twistc * dntz - branches[treeinuse][i].twists * dntx;
-                    dntx = branches[treeinuse][i].twistc * dntx + branches[treeinuse][i].twists * dntz;
+                    t = cachedBranchTransforms[i].twistc * dntz - cachedBranchTransforms[i].twists * dntx;
+                    dntx = cachedBranchTransforms[i].twistc * dntx + cachedBranchTransforms[i].twists * dntz;
                     dntz = t;
                 }
                 // Lean:
-                t = branches[treeinuse][i].leanc * dntx - branches[treeinuse][i].leans * dnty;
-                dnty = branches[treeinuse][i].leanc * dnty + branches[treeinuse][i].leans * dntx;
+                t = cachedBranchTransforms[i].leanc * dntx - cachedBranchTransforms[i].leans * dnty;
+                dnty = cachedBranchTransforms[i].leanc * dnty + cachedBranchTransforms[i].leans * dntx;
                 dntx = t;
                 // Rotate:
-                t = branches[treeinuse][i].rotatec * dntz - branches[treeinuse][i].rotates * dntx;
-                dntx = branches[treeinuse][i].rotatec * dntx + branches[treeinuse][i].rotates * dntz;
+                t = cachedBranchTransforms[i].rotatec * dntz - cachedBranchTransforms[i].rotates * dntx;
+                dntx = cachedBranchTransforms[i].rotatec * dntx + cachedBranchTransforms[i].rotates * dntz;
                 dntz = t;
 
                 // Scale!
@@ -1181,23 +1618,23 @@ void DoMyStuff(void)
                 // No!, all diffrent:
                 else
                 {
-                    dntx *= branches[treeinuse][i].scale;
-                    dnty *= branches[treeinuse][i].scale;
-                    dntz *= branches[treeinuse][i].scale;
+                    dntx *= cachedBranchTransforms[i].scale;
+                    dnty *= cachedBranchTransforms[i].scale;
+                    dntz *= cachedBranchTransforms[i].scale;
                 }
 
                 // Scale by heigth of branch?
                 if (trees[treeinuse].sctrnsl)
                 {
-                    dntx *= branches[treeinuse][i].height;
-                    dnty *= branches[treeinuse][i].height;
-                    dntz *= branches[treeinuse][i].height;
+                    dntx *= cachedBranchTransforms[i].height;
+                    dnty *= cachedBranchTransforms[i].height;
+                    dntz *= cachedBranchTransforms[i].height;
                 }
 
                 // Translate!
                 // Use heights?
                 if (trees[treeinuse].usehig)
-                    dnty += trees[treeinuse].height * branches[treeinuse][i].height;
+                    dnty += trees[treeinuse].height * cachedBranchTransforms[i].height;
                 // No!, all at top of stem:
                 else
                     dnty += trees[treeinuse].height;
@@ -1206,10 +1643,10 @@ void DoMyStuff(void)
                 dntx -= dtx;
                 dnty -= dty;
                 dntz -= dtz;
-                t = sqrt(dntx*dntx + dnty*dnty + dntz*dntz);
-                dntx /= t;
-                dnty /= t;
-                dntz /= t;
+                float inv_mag = Q_rsqrt(dntx*dntx + dnty*dnty + dntz*dntz);
+                dntx *= inv_mag;
+                dnty *= inv_mag;
+                dntz *= inv_mag;
 
                 // Color:
                 switch (colourmode)
@@ -1566,235 +2003,261 @@ void DoMyStuff(void)
  * --------------------------------------------------------------------- */
 void IFSlight(void)
 {
-    // Rotate to light position:
+    // Rotate to light position (assuming rotatelight() is needed)
     rotatelight();
 
-    // Clip z:
-    if ((zt > -1.0f) && (zt < 1.0f))
+    // Early Z clipping
+    if (zt <= -1.0f || zt >= 1.0f) return;
+    
+    float t, size, luma_val;
+    int nZ, nY, nX;
+    
+    // Precalculate size-related values once
+    size = (3.0f + zt) * 0.5f;
+    float size_factor = 2.0f - size;
+    
+    // Handle normal calculation if needed
+    if (donormal)
     {
-        // Do normal?:
-        if (donormal)
-        {
-            nxt = dntx + CPOSX;
-            nyt = dnty + CPOSY;
-            nzt = dntz + CPOSZ;
+        // Consolidate position calculations
+        nxt = dntx + CPOSX;
+        nyt = dnty + CPOSY;
+        nzt = dntz + CPOSZ;
 
-            // Rotate normal z to light position!
-            t = lryx * nzt - lryy * nxt;
-            nxt = lryx * nxt + lryy * nzt;
-            nzt = t;
+        // Optimize rotations by reducing temporaries
+        float temp = lryx * nzt - lryy * nxt;
+        nxt = lryx * nxt + lryy * nzt;
+        nzt = temp;
 
-            t = lrxx * nyt - lrxy * nzt;
-            nzt = lrxx * nzt + lrxy * nyt;
-            nyt = t;
+        temp = lrxx * nyt - lrxy * nzt;
+        nzt = lrxx * nzt + lrxy * nyt;
+        nyt = temp;
 
-            // Get light normal!
-            x = dtx - ntx;
-            y = dty - nty;
-            z = dtz - ntz;
+        // Light normal calculation
+        float x = dtx - ntx;
+        float y = dty - nty;
+        float z = dtz - ntz;
 
-            t = sqrt(x*x + y*y + z*z);
-            nzt -= (z / t);
-            nzt = (0.5f + nzt) / 2.0f;
-        }
-        // Do normal.
-
-        // Get distance to light:
-        size = (3.0f + zt) / 2.0f;
-        t = (2.0f - size);
-
-        // Calculate & calibrate luminousity:
-        if (donormal)
-            t = t * t * nzt;
-
-        // Calculate & calibrate luminousity:
-        if (donormal)
-            if ((logfoliage != USELOGS) && (lightness == 0))
-                t = ((2.0f * t) + pow(nzt, 3.0f)) / 3.0f;
-            else
-                t = t * t * nzt;
-
-        t = (1.0f + t) / 2.0f;
-
-        if (t < minbright)
-            minbright = t;
-        t = t - minbright;
-        if (t > maxbright)
-            maxbright = t;
-        t = t / maxbright;
-
-        t = t * 2.0f;
-        luma = t - 1.0f;
-        if (luma < 0.0f)
-            luma = 0.0f;
-        luma = 1.0f + pow(luma, 8.0f);
-        if (t > 1.0f)
-            t = 1.0f;
-        overexpose = int(255.0 * luma) - 0xFF;
-        if (overexpose < 0)
-            overexpose = 0;
-
-        if (useglow)
-            bright = int(48 * glow + 208 * t) & 0xFF;
+        float inv_length = Q_rsqrt(x*x + y*y + z*z);
+        nzt -= (z * inv_length);
+        nzt = (0.5f + nzt) * 0.5f;
+        
+        // Luminosity calculation
+        if ((logfoliage != USELOGS) && (lightness == 0))
+            t = ((2.0f * size_factor) + powf(nzt, 3.0f)) / 3.0f;
         else
-            bright = int(255 * t) & 0xFF;
+            t = size_factor * size_factor * nzt;
+    }
+    else
+    {
+        // Simpler calculation if not doing normal
+        t = size_factor;
+    }
 
-        blight = bright >> 1;
+    // Normalize t to [0,1] range
+    t = (1.0f + t) * 0.5f;
+    
+    // Brightness calibration
+    if (t < minbright)
+        minbright = t;
+    t = t - minbright;
+    if (t > maxbright)
+        maxbright = t;
+    t = t / maxbright;
 
-        nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
-        zt = (lims * imszoom) / size;
+    // Calculate lighting effects
+    t *= 2.0f;
+    luma_val = t - 1.0f;
+    luma_val = (luma_val < 0.0f) ? 0.0f : luma_val;
+    luma = 1.0f + powf(luma_val, 8.0f);
+    
+    // Clamp t
+    if (t > 1.0f) t = 1.0f;
+    
+    // Calculate overexposure
+    overexpose = static_cast<int>(255.0f * luma) - 0xFF;
+    overexpose = (overexpose < 0) ? 0 : overexpose;
 
-        nY = LMIDY + int(yt * zt);
-        nX = LMIDX + int(xt * zt);
-        // Clip y:
-        if ((nY >= 0) && (nY < LHEIGHT))
-        {
-            // Clip x:
-            if ((nX >= 0) && (nX < LWIDTH))
-            {
-                if (light[nY][nX] > (nZ + 2))
-                {
-                    // Create shadow.
-                    bright = blight;
-                    overexpose = 0;
-                    luma = 1.0f;
-                }
-                else if (doshadow)
-                {
-                    // Update counter for pixels written to shadow map:
-                    if ((light[nY][nX] + 2) < nZ)
-                        shadowswritten++;
-                    light[nY][nX] = nZ;
-                } // Shadow or not.
-            } // clip - X.
-        }    // clip - Y.
-    } // clip - Z.
+    // Calculate brightness
+    bright = useglow ? (static_cast<int>(48 * glow + 208 * t) & 0xFF) : 
+                       (static_cast<int>(255 * t) & 0xFF);
+    blight = bright >> 1;
 
-    return;
-} // IFSlight.
+    // Position and depth calculation
+    nZ = static_cast<int>(size_factor * (ZDEPTH >> 1)) & 0x7FFF;
+    
+    // Cache this division calculation
+    float zt_factor = (lims * imszoom) / size;
+    nY = LMIDY + static_cast<int>(yt * zt_factor);
+    nX = LMIDX + static_cast<int>(xt * zt_factor);
+    
+    // Boundary checking
+    if (nY < 0 || nY >= LHEIGHT || nX < 0 || nX >= LWIDTH) return;
+
+    // Shadow logic
+    if (light[nY][nX] > (nZ + 2))
+    {
+        // Create shadow
+        bright = blight;
+        overexpose = 0;
+        luma = 1.0f;
+    }
+    else if (doshadow)
+    {
+        // Update shadow map
+        if ((light[nY][nX] + 2) < nZ)
+            shadowswritten++;
+        light[nY][nX] = nZ;
+    }
+}
 
 /* --------------------------------------------------------------------- *
             Make it show
  * --------------------------------------------------------------------- */
 void IFSplot(void)
 {
-    // Rotate to angle of view:
+    // Rotate to angle of view
     rotateview();
 
-    // Clip z:
-    if ((zt > -1.0f) && (zt < 1.0f))
-    {
-        size = (3.0f + zt) / 2.0f;
-        nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
-        zt = (ims * imszoom) / size;
+    // Early Z clipping
+    if (zt <= -1.0f || zt >= 1.0f) {
+        return;
+    }
 
-        nY = BMIDY + int(yt * zt);
-        nX = BMIDX + int(xt * zt);
-        // Clip y:
-        if ((nY >= 0) && (nY < BHEIGHT))
-        {
-            // Clip x:
-            if ((nX >= 0) && (nX < BWIDTH))
-            {
-                // Plot if Point closer to viewer than
-                // the previous at the position:
-                if (bpict[nY][nX] < nZ)
-                {
-                    // Write new depth to z-buffer:
-                    bpict[nY][nX] = nZ;
+    // Calculate size and depth once
+    const float size = (3.0f + zt) * 0.5f;
+    const int nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
+    
+    // Calculate scaling factor once
+    const float zt_scale = (ims * imszoom) / size;
 
-                    // Update pixel counter:
-                    pixelswritten++;
+    // Calculate pixel coordinates
+    const int nY = BMIDY + int(yt * zt_scale);
+    const int nX = BMIDX + int(xt * zt_scale);
+    
+    // Early boundary check
+    if (nY < 0 || nY >= BHEIGHT || nX < 0 || nX >= BWIDTH) {
+        return;
+    }
 
-                    // Brighter than average?
-                    if (overexpose)
-                    {
-                        crt = int((crt + overexpose) / luma);
-                        cgt = int((cgt + overexpose) / luma);
-                        cbt = int((cbt + overexpose) / luma);
-                    } // Overexpose.
+    // Z-buffer check
+    if (bpict[nY][nX] >= nZ) {
+        return;  // Skip if not closer to viewer
+    }
 
-                    // Whiter shade of pale?:
-                    if (whitershade)
-                    {
-                        // Cold in varm:
-                        if (whitershade == 1)
-                        {
-                            crt = (((crt * 3) + bright) >> 2) & 0xFF;
-                            cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                            cbt = ((cbt + bright) >> 1) & 0xFF;
-                        }
-                        // Varm in cold:
-                        else
-                        {
-                            crt = ((crt + bright) >> 1) & 0xFF;
-                            cgt = (((cgt << 1) + bright) / 3) & 0xFF;
-                            cbt = (((cbt * 3) + bright) >> 2) & 0xFF;
-                        }
-                    } // Whiter shade of pale.
+    // We're going to render this pixel - update Z-buffer
+    bpict[nY][nX] = nZ;
+    pixelswritten++;
 
-                    crt = ((crt * bright) >> 8) & 0xFF;
-                    cgt = ((cgt * bright) >> 8) & 0xFF;
-                    cbt = ((cbt * bright) >> 8) & 0xFF;
-                    tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
-                    pict[nY][nX] = tcolor;
+    // Initialize color values with local copies to avoid globals
+    int cr = crt;
+    int cg = cgt;
+    int cb = cbt;
+    
+    // Handle overexposure
+    if (overexpose > 0) {
+        const float inv_luma = 1.0f / luma;
+        cr = int((cr + overexpose) * inv_luma);
+        cg = int((cg + overexpose) * inv_luma);
+        cb = int((cb + overexpose) * inv_luma);
+    }
 
-                    // ******************************
-                    // Anti anlize from pixel-buffer:
-                    // ******************************
-                    // 2x2 grid:
-                    nY = nY & 0xFFFE;
-                    nX = nX & 0xFFFE;
+    // Apply whitershade effect if needed
+    if (whitershade) {
+        if (whitershade == 1) {
+            // Cold in warm
+            cr = (((cr * 3) + bright) >> 2) & 0xFF;
+            cg = (((cg << 1) + bright) / 3) & 0xFF;
+            cb = ((cb + bright) >> 1) & 0xFF;
+        } else {
+            // Warm in cold
+            cr = ((cr + bright) >> 1) & 0xFF;
+            cg = (((cg << 1) + bright) / 3) & 0xFF;
+            cb = (((cb * 3) + bright) >> 2) & 0xFF;
+        }
+    }
 
-                    // Reset colours:
-                    ncols = 4;
-                    tRed = 0x00;
-                    tBlue = 0x00;
-                    tGreen = 0x00;
+    // Apply brightness scaling
+    const int bright_factor = bright; // Use a local copy
+    cr = ((cr * bright_factor) >> 8) & 0xFF;
+    cg = ((cg * bright_factor) >> 8) & 0xFF;
+    cb = ((cb * bright_factor) >> 8) & 0xFF;
+    
+    // Set pixel color in buffer
+    const unsigned int tcolor = ((cr << 16) | (cg << 8) | cb);
+    pict[nY][nX] = tcolor;
 
-                    // 2x2 pixels to 1 pixel:
-                    for (yi = 0; yi < 2; yi++)
-                    {
-                        nYt = nY + yi;
-                        if ((nYt >= 0) && (nYt < BHEIGHT))
-                        {
-                            for (xi = 0; xi < 2; xi++)
-                            {
-                                nXt = nX + xi;
-                                if ((nXt >= 0) && (nXt < BWIDTH))
-                                {
-                                    tcolor = pict[nYt][nXt];
-                                    tRed += (tcolor >> 16) & 0xFF;
-                                    tGreen += (tcolor >> 8) & 0xFF;
-                                    tBlue += tcolor & 0xFF;
-                                } // Clip x.
-                            } // for xi.
-                        } // Clip y.
-                    } // for yi.
-                    tRed = (tRed / ncols) & 0xFF;
-                    tGreen = (tGreen / ncols) & 0xFF;
-                    tBlue = (tBlue / ncols) & 0xFF;
-                    // End anti anilize.
+    // ******************************
+    // Anti-aliasing from pixel-buffer
+    // ******************************
+    // Align to 2x2 grid
+    const int baseY = nY & 0xFFFE;
+    const int baseX = nX & 0xFFFE;
 
-                    // Convert 8-bit red, green & blue to 32-bit xRGB:
-                    tcolor = ((tRed << 16) + (tGreen << 8) + tBlue) & 0x00FFFFFF;
+    // Bounds check for anti-aliasing region
+    if ((baseY + 1) >= BHEIGHT || (baseX + 1) >= BWIDTH) {
+        // Skip anti-aliasing if near edge
+        if (baseY < HEIGHT && baseX < WIDTH) {
+            pixelBuffer[(baseY >> 1) + (baseX >> 1) * WIDTH] = tcolor;
+        }
+        return;
+    }
 
-                    // ***********************
-                    // Write to screen buffer:
-                    // ***********************
-                    // 2x2 grid to 1x1 dito:
-                    nY = nY >> 1;
-                    nX = nX >> 1;
-                    if (nY < HEIGHT && nX < WIDTH) {
-                        pixelBuffer[nX + nY * WIDTH] = tcolor;
-                    }
-                } // Z-plot view.
-            } // clip - X.
-        } // clip - Y.
-    } // clip - Z.
+    // Accumulate colors for anti-aliasing
+    int tRed = 0, tGreen = 0, tBlue = 0;
+    int ncols = 0;
 
-    return;
-} // IFSplot.
+    // Loop unrolling for 2x2 grid
+    // Top-left pixel
+    unsigned int color = pict[baseY][baseX];
+    tRed += (color >> 16) & 0xFF;
+    tGreen += (color >> 8) & 0xFF;
+    tBlue += color & 0xFF;
+    ncols++;
+
+    // Top-right pixel
+    color = pict[baseY][baseX + 1];
+    tRed += (color >> 16) & 0xFF;
+    tGreen += (color >> 8) & 0xFF;
+    tBlue += color & 0xFF;
+    ncols++;
+
+    // Bottom-left pixel
+    color = pict[baseY + 1][baseX];
+    tRed += (color >> 16) & 0xFF;
+    tGreen += (color >> 8) & 0xFF;
+    tBlue += color & 0xFF;
+    ncols++;
+
+    // Bottom-right pixel
+    color = pict[baseY + 1][baseX + 1];
+    tRed += (color >> 16) & 0xFF;
+    tGreen += (color >> 8) & 0xFF;
+    tBlue += color & 0xFF;
+    ncols++;
+
+    // Calculate average color (using fast inverse multiplication if ncols is constant)
+    if (ncols == 4) {
+        tRed >>= 2;    // Divide by 4
+        tGreen >>= 2;  // Divide by 4
+        tBlue >>= 2;   // Divide by 4
+    } else {
+        // Fallback for variable divisor
+        tRed /= ncols;
+        tGreen /= ncols;
+        tBlue /= ncols;
+    }
+
+    // Construct final color
+    const unsigned int finalColor = ((tRed << 16) | (tGreen << 8) | tBlue) & 0x00FFFFFF;
+
+    // Write to screen buffer (with bounds check)
+    const int outY = baseY >> 1;
+    const int outX = baseX >> 1;
+    if (outY < HEIGHT && outX < WIDTH) {
+        pixelBuffer[outX + outY * WIDTH] = finalColor;
+    }
+}
 
 /* --------------------------------------------------------------------- *
         Rotate to view position:
@@ -2102,9 +2565,10 @@ void createbackground(void)
     tz[3]     = -x;
 
     // Colours:
-    tcr[2] = tcr[0] = 0xFF * RND;
-    tcg[2] = tcg[0] = 0xFF * RND;
-    tcb[2] = tcb[0] = 0xFF * RND;
+    // 0x00 A9 6E 0A
+    tcr[2] = tcr[0] = 0xA9;
+    tcg[2] = tcg[0] = 0x6E;
+    tcb[2] = tcb[0] = 0x0A;
     tcr[3] = tcr[1] = 0xFF;
     tcg[3] = tcg[1] = 0xFF;
     tcb[3] = tcb[1] = 0xFF;
@@ -2204,62 +2668,91 @@ void CamAng(void)
 /* --------------------------------------------------------------------- *
             "Manual" =)
  * --------------------------------------------------------------------- */
-void manual(void)
-{
-    // CLS:
-    clearscreen(0x00FFF0E0);
+// void manual(void)
+// {
+//     glViewport(0, 0, WIDTH, HEIGHT);
+//     glMatrixMode(GL_PROJECTION);
+//     glLoadIdentity();
+//     glOrtho(0, WIDTH, HEIGHT, 0, -1, 1);  // Adjust according to your viewport
+//     glMatrixMode(GL_MODELVIEW);
+//     glLoadIdentity();
+//     glDisable(GL_TEXTURE_2D);
+//     // glEnable(GL_BLEND);
+//     // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Head texts:
-    printsceneinfo();
-    printtreeinfo();
-    lcol = 0x00000080;
+//     // CLS:
+//     clearscreen(0x00FFF0E0);
 
-    float r, g, b;
-    unpackColor(lcol, &r, &g, &b);
+//     // Head texts:
+//     printsceneinfo();
+//     printtreeinfo();
 
-    drawText(10, 10, "SunCode's 3D Dragon Tree IFS, the Demo, (first version eight edition of May 2005)", r, g, b);
+//     float r, g, b;
+
+//     lcol = 0x00000080;
+//     unpackColor(lcol, &r, &g, &b);
+//     drawText(10, 10, "SunCode's 3D Dragon Tree IFS, the Demo, (first version eight edition of May 2005)", r, g, b);
     
-    // Keys:
-    TEXTBOX(30, 38, 556, 258, 0x00A0A0A0, 0x00D8F8E8);
-    lcol = 0x00006000;
-    tmp = 48;
-    yi = 56;
-    xi = 15;
-    drawText(tmp - 16, 38, "Keys to use in this demo:", r, g, b);
-    drawText(tmp, yi + xi * 0, "[Esc] = Exit program! | [Alt] = exit from render | [SPACE] = Toggle this screen and render mode screen.", r, g, b);
-    drawText(tmp, yi + xi * 1, "[R] = Randomize tree. | [A] = Randomize angle of view | [Arrow keys] = Rotate the scene.", r, g, b);
-    drawText(tmp, yi + xi * 2, "[N] = Select number of branches, (random, 2, 3, 4, 5, 6, 7 or 8) | [1] - [8] = Randomize single branch.", r, g, b);
-    drawText(tmp, yi + xi * 3, "[C] = Clear buffers, (useful after, for example a palette selection to clear out old pixels)", r, g, b);
-    drawText(tmp, yi + xi * 4, "[V] = Clear view, (useful after a selection, also removes my SunCode 'tag' from the screen =)", r, g, b);
-    drawText(tmp, yi + xi * 5, "[X] = Bigger tree. | [S] = Smaller tree. | [D] = Thicker tree. | [F] = Thinner tree.", r, g, b);
-    drawText(tmp, yi + xi * 6, "[Page Down] / [Page Up] = Zoom in / out. | [Home] = Reset zoom and angle of view.", r, g, b);
-    drawText(tmp, yi + xi * 7, "[I] = View information. | [T] = Test render, a white sheet, are pixels still written?, this will show that.", r, g, b);
-    drawText(tmp, yi + xi * 8, "[B] = Background, (on skyblue, on blue, on black, off black, off white). | [G] = Size of ground, (B, M, S).", r, g, b);
-    drawText(tmp, yi + xi * 9, "[P] = Randomize colours for foliage. | [E] = Extra foliage off, on, solo. | [U] = Use logs, cubes or sphears.", r, g, b);
-    drawText(tmp, yi + xi * 10, "[W] = Turn the whiter shade of pale to normal, flourescent or filament. | [L] = Toggle lights = light or dark", r, g, b);
-    drawText(tmp, yi + xi * 11, "[O] = Turn FUNKYCOLOURS on/off.", r, g, b);
-    drawText(tmp, yi + xi * 12, "[M] = More trees. | [F1] - [F4] = Toggle flags: 'Use heights', 'Global scale', 'Scale by height' and 'Use twist'.", r, g, b);
+//     // Keys:
+//     TEXTBOX(30, 38, 556, 258, 0x00A0A0A0, 0x00D8F8E8);
 
-    // Colours:
-    viewcols();
+//     lcol = 0x00006000;
+//     unpackColor(lcol, &r, &g, &b);
 
-    // Notes:
-    TEXTBOX(322, 270, 784, 568, 0x00A0A0A0, 0x00D8E8F8);
-    tmp = 340;
-    lcol = 0x00600000;
-    drawText(tmp - 16, 270, "Notes:", r, g, b);
-    drawText(tmp, 290, "Most trees looks awful but some don't and those are the ones we are looking for ;)", r, g, b);
-    drawText(tmp, 310, "A good idea is to render the image once to fill out the shadow-map and then press [C] to clear", r, g, b);
-    drawText(tmp, 322, "out the pixel and z-buffers and [V] to clear the view. And then render the image once again", r, g, b);
-    drawText(tmp, 334, "using the previously compleated shadow-map. This will make the shadows better.", r, g, b);
-    drawText(tmp, 354, "To save the current image you can press [Print Screen] and then [Esc] (to exit), and then the", r, g, b);
-    drawText(tmp, 366, "image is, (hopefully) on your clipboard, ready to get pasted into any graphics tool.", r, g, b);
-    drawText(tmp, 386, "The colours are choosen by random. Press [O] and you will enter 'FUNKYCOLOURS' mode. If", r, g, b);
-    drawText(tmp, 398, "you do not like the current set of colours, then simply press [P] until random finds a set you like.", r, g, b);
-    drawText(tmp, 550, "This program is part of the public domain, (PD), distribute and make copys freely.", r, g, b);
+//     tmp = 48;
+//     yi = 56;
+//     xi = 15;
+//     drawText(tmp - 16, 38, "Keys to use in this demo:", r, g, b);
+//     drawText(tmp, yi + xi * 0, "[Esc] = Exit program! | [Alt] = exit from render | [SPACE] = Toggle this screen and render mode screen.", r, g, b);
+//     drawText(tmp, yi + xi * 1, "[R] = Randomize tree. | [A] = Randomize angle of view | [Arrow keys] = Rotate the scene.", r, g, b);
+//     drawText(tmp, yi + xi * 2, "[N] = Select number of branches, (random, 2, 3, 4, 5, 6, 7 or 8) | [1] - [8] = Randomize single branch.", r, g, b);
+//     drawText(tmp, yi + xi * 3, "[C] = Clear buffers, (useful after, for example a palette selection to clear out old pixels)", r, g, b);
+//     drawText(tmp, yi + xi * 4, "[V] = Clear view, (useful after a selection, also removes my SunCode 'tag' from the screen =)", r, g, b);
+//     drawText(tmp, yi + xi * 5, "[X] = Bigger tree. | [S] = Smaller tree. | [D] = Thicker tree. | [F] = Thinner tree.", r, g, b);
+//     drawText(tmp, yi + xi * 6, "[Page Down] / [Page Up] = Zoom in / out. | [Home] = Reset zoom and angle of view.", r, g, b);
+//     drawText(tmp, yi + xi * 7, "[I] = View information. | [T] = Test render, a white sheet, are pixels still written?, this will show that.", r, g, b);
+//     drawText(tmp, yi + xi * 8, "[B] = Background, (on skyblue, on blue, on black, off black, off white). | [G] = Size of ground, (B, M, S).", r, g, b);
+//     drawText(tmp, yi + xi * 9, "[P] = Randomize colours for foliage. | [E] = Extra foliage off, on, solo. | [U] = Use logs, cubes or sphears.", r, g, b);
+//     drawText(tmp, yi + xi * 10, "[W] = Turn the whiter shade of pale to normal, flourescent or filament. | [L] = Toggle lights = light or dark", r, g, b);
+//     drawText(tmp, yi + xi * 11, "[O] = Turn FUNKYCOLOURS on/off.", r, g, b);
+//     drawText(tmp, yi + xi * 12, "[M] = More trees. | [F1] - [F4] = Toggle flags: 'Use heights', 'Global scale', 'Scale by height' and 'Use twist'.", r, g, b);
 
+//     // Colours:
+//     viewcols();
+
+//     // Notes:
+//     TEXTBOX(322, 270, 784, 568, 0x00A0A0A0, 0x00D8E8F8);
+//     tmp = 340;
+
+//     lcol = 0x00600000;
+//     unpackColor(lcol, &r, &g, &b);
+
+//     drawText(tmp - 16, 270, "Notes:", r, g, b);
+//     drawText(tmp, 290, "Most trees looks awful but some don't and those are the ones we are looking for ;)", r, g, b);
+//     drawText(tmp, 310, "A good idea is to render the image once to fill out the shadow-map and then press [C] to clear", r, g, b);
+//     drawText(tmp, 322, "out the pixel and z-buffers and [V] to clear the view. And then render the image once again", r, g, b);
+//     drawText(tmp, 334, "using the previously compleated shadow-map. This will make the shadows better.", r, g, b);
+//     drawText(tmp, 354, "To save the current image you can press [Print Screen] and then [Esc] (to exit), and then the", r, g, b);
+//     drawText(tmp, 366, "image is, (hopefully) on your clipboard, ready to get pasted into any graphics tool.", r, g, b);
+//     drawText(tmp, 386, "The colours are choosen by random. Press [O] and you will enter 'FUNKYCOLOURS' mode. If", r, g, b);
+//     drawText(tmp, 398, "you do not like the current set of colours, then simply press [P] until random finds a set you like.", r, g, b);
+//     drawText(tmp, 550, "This program is part of the public domain, (PD), distribute and make copys freely.", r, g, b);
+
+//     spacemess();
+
+//     return;
+// } // manual.
+
+/* --------------------------------------------------------------------- *
+        Press [V] to clear view message:
+ * --------------------------------------------------------------------- */
+void clearViewmess(void)
+{
+    float r, g, b;
+    unpackColor(txcol[showbackground], &r, &g, &b);
+    // drawText(360, 2, "Press [V] to clear view.", r, g, b);
     return;
-} // manual.
+} // clearViewmess.
 
 /* --------------------------------------------------------------------- *
         View foliage coloursation:
@@ -2270,8 +2763,8 @@ void viewcols(void)
     lcol = txcol[showbackground];
     float r, g, b;
     unpackColor(lcol, &r, &g, &b);
-    drawText(32, 270, "Foliage coloursation:", r, g, b);
-    drawText(132, 556, "Press [P] to randomize", r, g, b);
+    // drawText(32, 270, "Foliage coloursation:", r, g, b);
+    // drawText(132, 556, "Press [P] to randomize", r, g, b);
     writecols();
     return;
 } // viewcols.
@@ -2289,7 +2782,7 @@ void writecols(void)
         snprintf(stringbuf, sizeof(stringbuf), "Branch # %i;", i + 1);
         float r, g, b;
         unpackColor(txcol[showbackground], &r, &g, &b);
-        drawText(48, 290 + i * tmp, stringbuf, r, g, b);
+        // drawText(48, 290 + i * tmp, stringbuf, r, g, b);
 
         tcolor = ((tcr[4 + i] << 16) + (tcg[4 + i] << 8) + tcb[4 + i]) & 0x00FFFFFF;
         FILLBOX(160, 290 + i * tmp, 306, 318 + i * tmp, tcolor);
@@ -2307,12 +2800,12 @@ void spacemess(void)
     if (itersdone == 0)
     {
         snprintf(stringbuf, sizeof(stringbuf), "Press space to start render! %i iterations done, %i image pixels, %i shadow pixels.", itersdone, pixelswritten, shadowswritten);
-        drawText(64, 574, stringbuf, r, g, b);
+        // drawText(64, 574, stringbuf, r, g, b);
     }
     else
     {
         snprintf(stringbuf, sizeof(stringbuf), "Press space to continue render! %i iterations done, %i image pixels, %i shadow pixels.", itersdone, pixelswritten, shadowswritten);
-        drawText(64, 574, stringbuf, r, g, b);
+        // drawText(64, 574, stringbuf, r, g, b);
     }
 } // spacemess.
 
@@ -2324,7 +2817,7 @@ void pixelsmess(void)
     snprintf(stringbuf, sizeof(stringbuf), "%i iterations done, %i image pixels, %i shadow pixels.  (press [V] to clear view).", itersdone, pixelswritten, shadowswritten);
     float r, g, b;
     unpackColor(txcol[showbackground], &r, &g, &b);
-    drawText(192, 2, stringbuf, r, g, b);
+    // drawText(192, 2, stringbuf, r, g, b);
 } // pixelsmess.
 
 /* --------------------------------------------------------------------- *
@@ -2337,12 +2830,12 @@ void printsceneinfo(void)
     tmp = 8;
     float r, g, b;
     unpackColor(0x00000080, &r, &g, &b);
-    drawText(701, 65 + 0 * tmp, textbrmess[selnumbranch], r, g, b);
-    drawText(701, 65 + 1 * tmp, textbgmess[showbackground], r, g, b);
-    drawText(701, 65 + 2 * tmp, textgrmess[groundsize], r, g, b);
-    drawText(701, 65 + 3 * tmp, textlight[lightness], r, g, b);
-    drawText(701, 65 + 4 * tmp, textpales[whitershade], r, g, b);
-    drawText(701, 65 + 5 * tmp, textfunky[colourmode], r, g, b);
+    // drawText(701, 65 + 0 * tmp, textbrmess[selnumbranch], r, g, b);
+    // drawText(701, 65 + 1 * tmp, textbgmess[showbackground], r, g, b);
+    // drawText(701, 65 + 2 * tmp, textgrmess[groundsize], r, g, b);
+    // drawText(701, 65 + 3 * tmp, textlight[lightness], r, g, b);
+    // drawText(701, 65 + 4 * tmp, textpales[whitershade], r, g, b);
+    // drawText(701, 65 + 5 * tmp, textfunky[colourmode], r, g, b);
     return;
 } // printcoordinfo.
 
@@ -2354,16 +2847,16 @@ void printtreeinfo(void)
     TEXTBOX(670, 10, 784, 60, 0x00A0A0A0, 0x00FFFFFF);
     lcol = 0x00000080;
     tmp = 12;
-    float r, g, b;
-    unpackColor(lcol, &r, &g, &b);
-    snprintf(stringbuf, sizeof(stringbuf), "Now growing tree #%02i.", ((treeinuse + 1) & 0x1F));
-    drawText(672, 10 + tmp * 0, stringbuf, r, g, b);
-    snprintf(stringbuf, sizeof(stringbuf),"Name:%s.", trees[treeinuse].name);
-    drawText(672, 10 + tmp * 1, stringbuf, r, g, b);
-    snprintf(stringbuf, sizeof(stringbuf),"%s.", textbrmess[trees[treeinuse].branches - 1]);
-    drawText(672, 10 + tmp * 2, stringbuf, r, g, b);
-    snprintf(stringbuf, sizeof(stringbuf),"Uh=%i Gs=%i Sbh=%i Ut=%i", trees[treeinuse].usehig, trees[treeinuse].glblscl, trees[treeinuse].sctrnsl, trees[treeinuse].usetwst);
-    drawText(672, 10 + tmp * 3, stringbuf, r, g, b);
+    // float r, g, b;
+    // unpackColor(lcol, &r, &g, &b);
+    // snprintf(stringbuf, sizeof(stringbuf), "Now growing tree #%02i.", ((treeinuse + 1) & 0x1F));
+    // drawText(672, 10 + tmp * 0, stringbuf, r, g, b);
+    // snprintf(stringbuf, sizeof(stringbuf),"Name:%s.", trees[treeinuse].name);
+    // drawText(672, 10 + tmp * 1, stringbuf, r, g, b);
+    // snprintf(stringbuf, sizeof(stringbuf),"%s.", textbrmess[trees[treeinuse].branches - 1]);
+    // drawText(672, 10 + tmp * 2, stringbuf, r, g, b);
+    // snprintf(stringbuf, sizeof(stringbuf),"Uh=%i Gs=%i Sbh=%i Ut=%i", trees[treeinuse].usehig, trees[treeinuse].glblscl, trees[treeinuse].sctrnsl, trees[treeinuse].usetwst);
+    // drawText(672, 10 + tmp * 3, stringbuf, r, g, b);
     return;
 } // printcoordinfo.
 
@@ -2416,21 +2909,10 @@ void clearscreenbufs(uint32_t RGBdata)
 /* --------------------------------------------------------------------- *
         Initialize text output:
  * --------------------------------------------------------------------- */
- void unpackColor(unsigned int col, float *r, float *g, float *b) {
+void unpackColor(unsigned int col, float *r, float *g, float *b) {
     *r = ((col >> 16) & 0xFF) / 255.0f;
     *g = ((col >> 8) & 0xFF) / 255.0f;
     *b = (col & 0xFF) / 255.0f;
-}
-
-void drawText(float x, float y, const char *text, float r, float g, float b) {
-    char buffer[99999]; // output buffer
-    int num_quads = stb_easy_font_print(x, y, (char*)text, NULL, buffer, sizeof(buffer));
-
-    glColor3f(r, g, b);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(2, GL_FLOAT, 16, buffer); // each quad is 4 vertices, 2D positions
-    glDrawArrays(GL_QUADS, 0, num_quads * 4);
-    glDisableClientState(GL_VERTEX_ARRAY);
 }
 
 /* --------------------------------------------------------------------- *
@@ -2654,26 +3136,26 @@ void drawLine(void)
     if (fabs(lxs) > RATIO)
     {
         temp = RATIO / fabs(lxs);
-        lxs = (fabs(lxs) * temp) * SGN(lxs);
-        lys = (fabs(lys) * temp) * SGN(lys);
+        lxs = (fabs(lxs) * temp) * sign(lxs);
+        lys = (fabs(lys) * temp) * sign(lys);
     }
     if (fabs(lxe) > RATIO)
     {
         temp = RATIO / fabs(lxe);
-        lxe = (fabs(lxe) * temp) * SGN(lxe);
-        lye = (fabs(lye) * temp) * SGN(lye);
+        lxe = (fabs(lxe) * temp) * sign(lxe);
+        lye = (fabs(lye) * temp) * sign(lye);
     }
     if (fabs(lys) > 1.0f)
     {
         temp = 1.0f / fabs(lys);
-        lxs = (fabs(lxs) * temp) * SGN(lxs);
-        lys = (fabs(lys) * temp) * SGN(lys);
+        lxs = (fabs(lxs) * temp) * sign(lxs);
+        lys = (fabs(lys) * temp) * sign(lys);
     }
     if (fabs(lye) > 1.0f)
     {
         temp = 1.0f / fabs(lye);
-        lxe = (fabs(lxe) * temp) * SGN(lxe);
-        lye = (fabs(lye) * temp) * SGN(lye);
+        lxe = (fabs(lxe) * temp) * sign(lxe);
+        lye = (fabs(lye) * temp) * sign(lye);
     }
     // clip ends.
 
@@ -2712,26 +3194,26 @@ void drawMulticolLine(void)
     if (fabs(lxs) > RATIO)
     {
         temp = RATIO / fabs(lxs);
-        lxs = (fabs(lxs) * temp) * SGN(lxs);
-        lys = (fabs(lys) * temp) * SGN(lys);
+        lxs = (fabs(lxs) * temp) * sign(lxs);
+        lys = (fabs(lys) * temp) * sign(lys);
     }
     if (fabs(lxe) > RATIO)
     {
         temp = RATIO / fabs(lxe);
-        lxe = (fabs(lxe) * temp) * SGN(lxe);
-        lye = (fabs(lye) * temp) * SGN(lye);
+        lxe = (fabs(lxe) * temp) * sign(lxe);
+        lye = (fabs(lye) * temp) * sign(lye);
     }
     if (fabs(lys) > 1.0f)
     {
         temp = 1.0f / fabs(lys);
-        lxs = (fabs(lxs) * temp) * SGN(lxs);
-        lys = (fabs(lys) * temp) * SGN(lys);
+        lxs = (fabs(lxs) * temp) * sign(lxs);
+        lys = (fabs(lys) * temp) * sign(lys);
     }
     if (fabs(lye) > 1.0f)
     {
         temp = 1.0f / fabs(lye);
-        lxe = (fabs(lxe) * temp) * SGN(lxe);
-        lye = (fabs(lye) * temp) * SGN(lye);
+        lxe = (fabs(lxe) * temp) * sign(lxe);
+        lye = (fabs(lye) * temp) * sign(lye);
     }
     // clip ends.
 
@@ -2769,26 +3251,26 @@ void drawBox(void)
     if (fabs(lxs) > RATIO)
     {
         temp = RATIO / fabs(lxs);
-        lxs = (fabs(lxs) * temp) * SGN(lxs);
-        lys = (fabs(lys) * temp) * SGN(lys);
+        lxs = (fabs(lxs) * temp) * sign(lxs);
+        lys = (fabs(lys) * temp) * sign(lys);
     }
     if (fabs(lxe) > RATIO)
     {
         temp = RATIO / fabs(lxe);
-        lxe = (fabs(lxe) * temp) * SGN(lxe);
-        lye = (fabs(lye) * temp) * SGN(lye);
+        lxe = (fabs(lxe) * temp) * sign(lxe);
+        lye = (fabs(lye) * temp) * sign(lye);
     }
     if (fabs(lys) > 1.0f)
     {
         temp = 1.0f / fabs(lys);
-        lxs = (fabs(lxs) * temp) * SGN(lxs);
-        lys = (fabs(lys) * temp) * SGN(lys);
+        lxs = (fabs(lxs) * temp) * sign(lxs);
+        lys = (fabs(lys) * temp) * sign(lys);
     }
     if (fabs(lye) > 1.0f)
     {
         temp = 1.0f / fabs(lye);
-        lxe = (fabs(lxe) * temp) * SGN(lxe);
-        lye = (fabs(lye) * temp) * SGN(lye);
+        lxe = (fabs(lxe) * temp) * sign(lxe);
+        lye = (fabs(lye) * temp) * sign(lye);
     }
     // clip ends.
 
@@ -2872,6 +3354,7 @@ void drawBoxi(void)
 
     return;
 } // drawBoxi.
+
 
 ///////////////////////////////////////////////////////////////////////////
 /* --------------------------------------------------------------------- *
@@ -3251,23 +3734,6 @@ void loadtrees ( void )
 
 #endif // USESETUPS
 
-// 	if ( WASERROR == opensource ( "trees.IFS" ) )
-//   {
-//   	textline ( 7, 5, "** ERROR **", BIGFONT, 0x008080FF );
-//   	textline ( 6, 4, "** ERROR **", BIGFONT, 0x000000FF );
-//   	textline ( 7, 25, "The preset file 'Trees.IFS' was not found", BIGFONT, 0x00808080 );
-//   	textline ( 6, 24, "The preset file 'Trees.IFS' was not found.", BIGFONT, 0x00FFFFFF );
-//   	textline ( 7, 40, "Use the compiler to create a new one.", BIGFONT, 0x00808080 );
-//   	textline ( 6, 39, "Use the compiler to create a new one.", BIGFONT, 0x00FFFFFF );
-//   	textline ( 7, 70, "Press [Escape] to exit!", BIGFONT, 0x00808080 );
-//   	textline ( 6, 69, "Press [Escape] to exit!", BIGFONT, 0x00FFFFFF );
-//     while ( 0 <= GetAsyncKeyState ( VK_ESCAPE ) )
-//     	;
-// 		PostMessage ( hwnd, WM_CLOSE, 0, 0 );
-//   }
-
-	// Load the preset trees and
-  // branches from file-buffer:
   loadtree ( );
 
 } // loadtrees.

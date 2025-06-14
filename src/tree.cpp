@@ -390,7 +390,6 @@ float Q_rsqrt(float number) {
     return y;
 }
 
-
 int sign(double x)
 {
     if (x < 0.0f)
@@ -400,21 +399,6 @@ int sign(double x)
 } // sign.
 
 
-uint32_t* getPixelBufferPtr() {
-    return pixelBuffer;
-}
-
-void simulateKeyPress(int key) {
-    if (key == 114) { // ASCII for 'R'
-        treeinuse = 31;
-            newsetup();
-            clearallbufs(bgcol[showbackground]);
-            clearscreen(bgcol[showbackground]);
-            printtreeinfo();
-            writecols();
-            clearViewmess();
-    }
-}
 
 /* --------------------------------------------------------------------- *
             GLFW error callback
@@ -2108,154 +2092,6 @@ void IFSlight(void)
         if ((light[nY][nX] + 2) < nZ)
             shadowswritten++;
         light[nY][nX] = nZ;
-    }
-}
-
-/* --------------------------------------------------------------------- *
-            Make it show
- * --------------------------------------------------------------------- */
-void IFSplot(void)
-{
-    // Rotate to angle of view
-    rotateview();
-
-    // Early Z clipping
-    if (zt <= -1.0f || zt >= 1.0f) {
-        return;
-    }
-
-    // Calculate size and depth once
-    const float size = (3.0f + zt) * 0.5f;
-    const int nZ = int((2.0f - size) * (ZDEPTH >> 1)) & 0x7FFF;
-    
-    // Calculate scaling factor once
-    const float zt_scale = (ims * imszoom) / size;
-
-    // Calculate pixel coordinates
-    const int nY = BMIDY + int(yt * zt_scale);
-    const int nX = BMIDX + int(xt * zt_scale);
-    
-    // Early boundary check
-    if (nY < 0 || nY >= BHEIGHT || nX < 0 || nX >= BWIDTH) {
-        return;
-    }
-
-    // Z-buffer check
-    if (bpict[nY][nX] >= nZ) {
-        return;  // Skip if not closer to viewer
-    }
-
-    // We're going to render this pixel - update Z-buffer
-    bpict[nY][nX] = nZ;
-    pixelswritten++;
-
-    // Initialize color values with local copies to avoid globals
-    int cr = crt;
-    int cg = cgt;
-    int cb = cbt;
-    
-    // Handle overexposure
-    if (overexpose > 0) {
-        const float inv_luma = 1.0f / luma;
-        cr = int((cr + overexpose) * inv_luma);
-        cg = int((cg + overexpose) * inv_luma);
-        cb = int((cb + overexpose) * inv_luma);
-    }
-
-    // Apply whitershade effect if needed
-    if (whitershade) {
-        if (whitershade == 1) {
-            // Cold in warm
-            cr = (((cr * 3) + bright) >> 2) & 0xFF;
-            cg = (((cg << 1) + bright) / 3) & 0xFF;
-            cb = ((cb + bright) >> 1) & 0xFF;
-        } else {
-            // Warm in cold
-            cr = ((cr + bright) >> 1) & 0xFF;
-            cg = (((cg << 1) + bright) / 3) & 0xFF;
-            cb = (((cb * 3) + bright) >> 2) & 0xFF;
-        }
-    }
-
-    // Apply brightness scaling
-    const int bright_factor = bright; // Use a local copy
-    cr = ((cr * bright_factor) >> 8) & 0xFF;
-    cg = ((cg * bright_factor) >> 8) & 0xFF;
-    cb = ((cb * bright_factor) >> 8) & 0xFF;
-    
-    // Set pixel color in buffer
-    const unsigned int tcolor = ((cr << 16) | (cg << 8) | cb);
-    pict[nY][nX] = tcolor;
-
-    // ******************************
-    // Anti-aliasing from pixel-buffer
-    // ******************************
-    // Align to 2x2 grid
-    const int baseY = nY & 0xFFFE;
-    const int baseX = nX & 0xFFFE;
-
-    // Bounds check for anti-aliasing region
-    if ((baseY + 1) >= BHEIGHT || (baseX + 1) >= BWIDTH) {
-        // Skip anti-aliasing if near edge
-        if (baseY < HEIGHT && baseX < WIDTH) {
-            pixelBuffer[(baseY >> 1) + (baseX >> 1) * WIDTH] = tcolor;
-        }
-        return;
-    }
-
-    // Accumulate colors for anti-aliasing
-    int tRed = 0, tGreen = 0, tBlue = 0;
-    int ncols = 0;
-
-    // Loop unrolling for 2x2 grid
-    // Top-left pixel
-    unsigned int color = pict[baseY][baseX];
-    tRed += (color >> 16) & 0xFF;
-    tGreen += (color >> 8) & 0xFF;
-    tBlue += color & 0xFF;
-    ncols++;
-
-    // Top-right pixel
-    color = pict[baseY][baseX + 1];
-    tRed += (color >> 16) & 0xFF;
-    tGreen += (color >> 8) & 0xFF;
-    tBlue += color & 0xFF;
-    ncols++;
-
-    // Bottom-left pixel
-    color = pict[baseY + 1][baseX];
-    tRed += (color >> 16) & 0xFF;
-    tGreen += (color >> 8) & 0xFF;
-    tBlue += color & 0xFF;
-    ncols++;
-
-    // Bottom-right pixel
-    color = pict[baseY + 1][baseX + 1];
-    tRed += (color >> 16) & 0xFF;
-    tGreen += (color >> 8) & 0xFF;
-    tBlue += color & 0xFF;
-    ncols++;
-
-    // Calculate average color (using fast inverse multiplication if ncols is constant)
-    if (ncols == 4) {
-        tRed >>= 2;    // Divide by 4
-        tGreen >>= 2;  // Divide by 4
-        tBlue >>= 2;   // Divide by 4
-    } else {
-        // Fallback for variable divisor
-        tRed /= ncols;
-        tGreen /= ncols;
-        tBlue /= ncols;
-    }
-
-    // Construct final color
-    const unsigned int finalColor = ((tRed << 16) | (tGreen << 8) | tBlue) & 0x00FFFFFF;
-
-    // Write to screen buffer (with bounds check)
-    const int outY = baseY >> 1;
-    const int outX = baseX >> 1;
-    if (outY < HEIGHT && outX < WIDTH) {
-        pixelBuffer[outX + outY * WIDTH] = finalColor;
     }
 }
 

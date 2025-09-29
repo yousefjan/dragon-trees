@@ -1,6 +1,6 @@
 # Dragon Tree IFS
 
-This project renders L-system fractal trees, inspired by Solkoll's implementation (archived [here](https://web.archive.org/web/20080421175129/)) used to generate such images used on Wikipedia (found [here](https://classes.engineering.wustl.edu/cse425s/index.php?title=File:Dragon_trees.jpg)). The original code was based on MS DirectX API. This version has been fully reworked to use OpenGL.
+This project renders L-system fractal trees, inspired by Solkoll's implementation (archived [here](https://web.archive.org/web/20080622061317/http://web.comhem.se/solgrop/3dtree.htm)) used to generate such images used on Wikipedia (found [here](https://classes.engineering.wustl.edu/cse425s/index.php?title=File:Dragon_trees.jpg)). The original code was based on MS DirectX API. This version has been fully reworked to use OpenGL.
 
 ---
 

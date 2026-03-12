@@ -77,7 +77,7 @@ The heart of the program relies on **IFS**. An IFS is a set of affine transforma
 
 #### The Chaos Game Algorithm
 The program renders trees using a specific Monte Carlo method known as the Chaos Game:
-1.  Start with a random 3D point $(x, y, z)$ in space.
+1.  Start with a random 3D point (x, y, z) in space.
 2.  Iteratively apply one of several defined **transformations** (rules) to this point.
     -   One rule represents the "stem" (usually just moving up).
     -   Other rules represent "branches" (scaling down, rotating, and moving up).
@@ -99,7 +99,7 @@ Each branch is defined by:
 
 ### 3. Mathematical Transformations
 
-The program does not use standard 4x4 matrices for transformations. Instead, it manually applies rotation and translation formulas to 3D coordinates $(x, y, z)$ and their normal vectors $(nx, ny, nz)$.
+The program does not use standard 4x4 matrices for transformations. Instead, it manually applies rotation and translation formulas to 3D coordinates (x, y, z) and their normal vectors (nx, ny, nz).
 
 #### Coordinate System
 -   **Y-axis**: Vertical (Up/Down). The trees grow along the Y-axis.
@@ -110,44 +110,59 @@ The program does not use standard 4x4 matrices for transformations. Instead, it 
 For every iteration, the program applies the inverse transformations in reverse order of operation to move a point "up" the tree structure.
 
 ##### 1. Twist (Rotation around Y-axis local to branch)
-Rotates the point $(x, z)$ by the twist angle $\theta_t$.
-$$
-x' = x \cos(\theta_t) - z \sin(\theta_t) \\
-z' = x \sin(\theta_t) + z \cos(\theta_t)
-$$
+Rotates the point (x, z) by the twist angle θ_t.
+
+```math
+\begin{aligned}
+x' &= x \cos(\theta_t) - z \sin(\theta_t) \\
+z' &= x \sin(\theta_t) + z \cos(\theta_t)
+\end{aligned}
+```
 
 ##### 2. Lean (Rotation around Z-axis)
- tilts the branch away from the trunk by angle $\phi$.
-$$
-x'' = x' \cos(\phi) - y \sin(\phi) \\
-y' = x' \sin(\phi) + y \cos(\phi)
-$$
+Lean tilts the branch away from the trunk by angle φ.
+
+```math
+\begin{aligned}
+x'' &= x' \cos(\phi) - y \sin(\phi) \\
+y' &= x' \sin(\phi) + y \cos(\phi)
+\end{aligned}
+```
 
 ##### 3. Rotate (Rotation around Y-axis global)
-Rotates the branch around the parent trunk by angle $\psi$.
-$$
-x''' = x'' \cos(\psi) - z' \sin(\psi) \\
-z'' = x'' \sin(\psi) + z' \cos(\psi)
-$$
+Rotates the branch around the parent trunk by angle ψ.
+
+```math
+\begin{aligned}
+x''' &= x'' \cos(\psi) - z' \sin(\psi) \\
+z'' &= x'' \sin(\psi) + z' \cos(\psi)
+\end{aligned}
+```
 
 ##### 4. Scale
 Shrinks the point.
-$$
-x_{final} = x''' \cdot s \\
-y_{final} = y' \cdot s \\
-z_{final} = z'' \cdot s
-$$
+
+```math
+\begin{aligned}
+x_{final} &= x''' \cdot s \\
+y_{final} &= y' \cdot s \\
+z_{final} &= z'' \cdot s
+\end{aligned}
+```
+
 *Note: Scaling logic varies based on `glblscl` (global scale) or per-branch scale flags.*
 
 ##### 5. Translate
 Moves the branch up the stem.
-$$
-y_{final} += H
-$$
-Where $H$ is the tree height or branch attachment height.
+
+```math
+y_{final} = y_{final} + H
+```
+
+Where H is the tree height or branch attachment height.
 
 #### Normal Vectors
-Crucially, the program also transforms a **Normal Vector** $(nx, ny, nz)$ alongside the position. The normal vector represents the direction the surface is facing at that point. It undergoes Rotation and Twist but **not** Translation (vectors represent direction, not position). This allows for realistic lighting calculations later.
+Crucially, the program also transforms a **Normal Vector** (nx, ny, nz) alongside the position. The normal vector represents the direction the surface is facing at that point. It undergoes Rotation and Twist but **not** Translation (vectors represent direction, not position). This allows for realistic lighting calculations later.
 
 ### 4. Rendering Pipeline
 
@@ -157,25 +172,24 @@ The rendering happens in the `DoMyStuff` function in `src/tree.cpp`.
     -   A batch of iterations (e.g., 20,000) is run per frame.
     -   For each iteration, a random branch rule is selected.
     -   The mathematical transformations described above are applied.
-    -   The resulting 3D point $(x_t, y_t, z_t)$ represents a spot on the tree.
+    -   The resulting 3D point (x_t, y_t, z_t) represents a spot on the tree.
 
 2.  **Lighting Calculation (`IFSlight`)**:
     -   The program calculates the dot product between the transformed Normal Vector and a Light Vector.
-    -   $Intensity = \vec{N} \cdot \vec{L}$
+    -   Intensity = N · L
     -   This determines the brightness of the pixel (Lambertian reflection).
 
 3.  **3D to 2D Projection**:
     -   The 3D point is rotated according to the Camera Angle (`rotateview`).
     -   Perspective projection is applied:
-        $$
-        scale = \frac{constant}{distance}
-        $$
-        $$
-        x_{screen} = x_{world} \cdot scale + CenterX
-        $$
-        $$
-        y_{screen} = y_{world} \cdot scale + CenterY
-        $$
+
+        ```math
+        \begin{aligned}
+        scale &= \frac{constant}{distance} \\
+        x_{screen} &= x_{world} \cdot scale + CenterX \\
+        y_{screen} &= y_{world} \cdot scale + CenterY
+        \end{aligned}
+        ```
 
 4.  **Z-Buffering**:
     -   The program maintains a **Depth Buffer** (`bpict` or `nZ`).

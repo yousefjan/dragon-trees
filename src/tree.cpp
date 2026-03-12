@@ -23,7 +23,6 @@
 #endif
 
 #include "utils.h"
-#include "atree.h"
 
 // OpenGL context
 GLFWwindow* window;
@@ -340,19 +339,6 @@ int useLoCoS = 0;
 int colourmode = 0;
 int LoCoSPali = 0;
 
-// **************
-// **** FILE ****
-// **************
-// Buffer for source file:
-char filebuf[32768];
-// Size of input file:
-unsigned int filesize;
-// File handle:
-FILE* infile;
-
-// Buffer for trees:
-ATREE tree[NUMTREES];
-
 // Key state handler
 bool keyStates[512]; // More than enough for all GLFW keys
 bool keyPressed[512]; // To track if a key was just pressed this frame
@@ -420,6 +406,55 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
         else if (action == GLFW_RELEASE) {
             keyStates[key] = false;
+        }
+    }
+}
+
+/* --------------------------------------------------------------------- *
+            Draw software text into pixel buffer
+ * --------------------------------------------------------------------- */
+void drawText(float x, float y, const char* text, float r, float g, float b)
+{
+    if (text == NULL || text[0] == '\0') {
+        return;
+    }
+
+    static char buffer[131072];
+    int num_quads = stb_easy_font_print(x, y, (char*)text, NULL, buffer, sizeof(buffer));
+    if (num_quads <= 0) {
+        return;
+    }
+
+    int red = std::clamp((int)(r * 255.0f), 0, 255);
+    int green = std::clamp((int)(g * 255.0f), 0, 255);
+    int blue = std::clamp((int)(b * 255.0f), 0, 255);
+    uint32_t color = ((uint32_t)red << 16) | ((uint32_t)green << 8) | (uint32_t)blue;
+
+    for (int q = 0; q < num_quads; ++q) {
+        float min_x = 1e9f;
+        float min_y = 1e9f;
+        float max_x = -1e9f;
+        float max_y = -1e9f;
+
+        for (int v = 0; v < 4; ++v) {
+            const char* base = buffer + ((q * 4 + v) * 16);
+            float vx = *((const float*)(base + 0));
+            float vy = *((const float*)(base + 4));
+            min_x = std::min(min_x, vx);
+            min_y = std::min(min_y, vy);
+            max_x = std::max(max_x, vx);
+            max_y = std::max(max_y, vy);
+        }
+
+        int ix0 = std::max(0, (int)floorf(min_x));
+        int iy0 = std::max(0, (int)floorf(min_y));
+        int ix1 = std::min(WIDTH - 1, (int)ceilf(max_x));
+        int iy1 = std::min(HEIGHT - 1, (int)ceilf(max_y));
+
+        for (int py = iy0; py <= iy1; ++py) {
+            for (int px = ix0; px <= ix1; ++px) {
+                pixelBuffer[py * WIDTH + px] = color;
+            }
         }
     }
 }
@@ -943,11 +978,6 @@ void processInput(void)
     for (int i = 0; i < 512; i++) {
         keyPressed[i] = false;
     }
-    
-    // Reset key pressed state for next frame
-    for (int i = 0; i < 512; i++) {
-        keyPressed[i] = false;
-    }
 }
 
 /* --------------------------------------------------------------------- *
@@ -988,8 +1018,7 @@ int main(int argc, char** argv)
         
         else if (programMode == 1) {
             // View info screen
-            // printf("Viewing info screen...\n");
-            // manual();
+            drawInfoScreen();
         }
         
         // Render to screen
@@ -1006,186 +1035,6 @@ int main(int argc, char** argv)
     return 0;
 }
 
-/* --------------------------------------------------------------------- *
-            Render pixel buffer to texture
- * --------------------------------------------------------------------- */
-void renderToTexture(void)
-{
-    // Copy from our pixel buffer to OpenGL texture
-    glBindTexture(GL_TEXTURE_2D, screenTexture);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, pixelBuffer);
-}
-
-/* --------------------------------------------------------------------- *
-            Draw screen texture
- * --------------------------------------------------------------------- */
-void drawScreenTexture(void)
-{
-    // Clear the screen
-    glClear(GL_COLOR_BUFFER_BIT);
-    
-    // Use shader program
-    glUseProgram(shaderProgram);
-    
-    // Bind the texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, screenTexture);
-    
-    // Draw the quad
-    glBindVertexArray(quadVAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
-/* --------------------------------------------------------------------- *
-            Initialize OpenGL
- * --------------------------------------------------------------------- */
-void initOpenGL(void)
-{
-    printf("Initializing OpenGL...\n");
-    // Initialize GLEW
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-        fprintf(stderr, "GLEW initialization failed: %s\n", glewGetErrorString(err));
-        exit(1);
-    }
-    
-    // Create shaders
-    createShaders();
-    
-    // Setup quad for rendering
-    setupQuad();
-    
-    // Setup framebuffer and texture
-    setupFramebuffer();
-    
-    // Set up OpenGL state
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glDisable(GL_DEPTH_TEST);
-}
-
-/* --------------------------------------------------------------------- *
-            Setup framebuffer with texture
- * --------------------------------------------------------------------- */
-void setupFramebuffer(void)
-{
-    // Create texture for rendering
-    glGenTextures(1, &screenTexture);
-    glBindTexture(GL_TEXTURE_2D, screenTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WIDTH, HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelBuffer);
-}
-
-void setupQuad() {
-    float vertices[] = {
-        // positions        // texture coords
-        -1.0f,  1.0f, 0.0f, 0.0f, 0.0f, // top left
-        -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, // bottom left
-         1.0f, -1.0f, 0.0f, 1.0f, 1.0f, // bottom right
-         1.0f,  1.0f, 0.0f, 1.0f, 0.0f  // top right
-    };
-    
-    unsigned int indices[] = {
-        0, 1, 2,
-        0, 2, 3
-    };
-    
-    glGenVertexArrays(1, &quadVAO);
-    glGenBuffers(1, &quadVBO);
-    GLuint quadEBO;
-    glGenBuffers(1, &quadEBO);
-    
-    glBindVertexArray(quadVAO);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-    
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    // texture coord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    glBindVertexArray(0);
-}
-
-/* --------------------------------------------------------------------- *
-            Create shader program
- * --------------------------------------------------------------------- */
-void createShaders(void)
-{
-    // Simple vertex shader
-    const char* vertexShaderSource = 
-        "#version 330 core\n"
-        "layout (location = 0) in vec3 aPos;\n"
-        "layout (location = 1) in vec2 aTexCoord;\n"
-        "out vec2 TexCoord;\n"
-        "void main()\n"
-        "{\n"
-        "   gl_Position = vec4(aPos, 1.0);\n"
-        "   TexCoord = aTexCoord;\n"
-        "}\n";
-    
-    // Simple fragment shader
-    const char* fragmentShaderSource = 
-        "#version 330 core\n"
-        "out vec4 FragColor;\n"
-        "in vec2 TexCoord;\n"
-        "uniform sampler2D screenTexture;\n"
-        "void main()\n"
-        "{\n"
-        "   FragColor = texture(screenTexture, TexCoord);\n"
-        "}\n";
-    
-    // Compile vertex shader
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    
-    // Check for compilation errors
-    GLint success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        fprintf(stderr, "Shader vertex compilation failed\n%s\n", infoLog);
-    }
-    
-    // Compile fragment shader
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    
-    // Check for compilation errors
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        fprintf(stderr, "Shader fragment compilation failed\n%s\n", infoLog);
-    }
-    
-    // Create shader program
-    shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    
-    // Check for linking errors
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        fprintf(stderr, "Shader program linking failed\n%s\n", infoLog);
-    }
-    
-    // Clean up shaders
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-}
 
 /* --------------------------------------------------------------------- *
             Setup: randomize,
@@ -1243,27 +1092,6 @@ bool doInit(void)
     }
     
     return true;
-}
-
-/* --------------------------------------------------------------------- *
-            Cleanup
- * --------------------------------------------------------------------- */
-void finiObjects(void)
-{
-    // Clean up OpenGL resources
-    glDeleteTextures(1, &screenTexture);
-    glDeleteFramebuffers(1, &frameBuffer);
-    glDeleteProgram(shaderProgram);
-    
-    // Clean up font textures
-    glDeleteTextures(3, fontTextures);
-
-    glDeleteVertexArrays(1, &quadVAO);
-    glDeleteBuffers(1, &quadVBO);
-    glDeleteTextures(1, &screenTexture);
-    glDeleteProgram(shaderProgram);
-    
-    // GLFW window and context are handled by glfwTerminate in main
 }
 
 /* --------------------------------------------------------------------- *
@@ -2580,13 +2408,35 @@ void CamAng(void)
 // } // manual.
 
 /* --------------------------------------------------------------------- *
+        Info screen rendering:
+ * --------------------------------------------------------------------- */
+void drawInfoScreen(void)
+{
+    clearscreen(bgcol[showbackground]);
+    printsceneinfo();
+    printtreeinfo();
+    viewcols();
+    pixelsmess();
+    spacemess();
+
+    float r, g, b;
+    unpackColor(txcol[showbackground], &r, &g, &b);
+
+    drawText(32, 24, "Dragon Trees - Info Screen", r, g, b);
+    drawText(32, 46, "Space: resume render    Esc: quit", r, g, b);
+    drawText(32, 68, "Arrows: rotate    PgUp/PgDn: zoom    Home: reset view", r, g, b);
+    drawText(32, 90, "M: next tree    R: random tree    N: branch preset", r, g, b);
+    drawText(32, 112, "B/G/L/W/O/P: scene and palette controls", r, g, b);
+}
+
+/* --------------------------------------------------------------------- *
         Press [V] to clear view message:
  * --------------------------------------------------------------------- */
 void clearViewmess(void)
 {
     float r, g, b;
     unpackColor(txcol[showbackground], &r, &g, &b);
-    // drawText(360, 2, "Press [V] to clear view.", r, g, b);
+    drawText(360, 2, "Press [V] to clear view.", r, g, b);
     return;
 } // clearViewmess.
 
@@ -2599,8 +2449,8 @@ void viewcols(void)
     lcol = txcol[showbackground];
     float r, g, b;
     unpackColor(lcol, &r, &g, &b);
-    // drawText(32, 270, "Foliage coloursation:", r, g, b);
-    // drawText(132, 556, "Press [P] to randomize", r, g, b);
+    drawText(32, 270, "Foliage coloursation:", r, g, b);
+    drawText(132, 556, "Press [P] to randomize", r, g, b);
     writecols();
     return;
 } // viewcols.
@@ -2618,7 +2468,7 @@ void writecols(void)
         snprintf(stringbuf, sizeof(stringbuf), "Branch # %i;", i + 1);
         float r, g, b;
         unpackColor(txcol[showbackground], &r, &g, &b);
-        // drawText(48, 290 + i * tmp, stringbuf, r, g, b);
+        drawText(48, 290 + i * tmp, stringbuf, r, g, b);
 
         tcolor = ((tcr[4 + i] << 16) + (tcg[4 + i] << 8) + tcb[4 + i]) & 0x00FFFFFF;
         FILLBOX(160, 290 + i * tmp, 306, 318 + i * tmp, tcolor);
@@ -2635,13 +2485,13 @@ void spacemess(void)
     unpackColor(txcol[showbackground], &r, &g, &b);
     if (itersdone == 0)
     {
-        snprintf(stringbuf, sizeof(stringbuf), "Press space to start render! %i iterations done, %i image pixels, %i shadow pixels.", itersdone, pixelswritten, shadowswritten);
-        // drawText(64, 574, stringbuf, r, g, b);
+        snprintf(stringbuf, sizeof(stringbuf), "Press space to start render! %ld iterations done, %ld image pixels, %ld shadow pixels.", itersdone, pixelswritten, shadowswritten);
+        drawText(64, 574, stringbuf, r, g, b);
     }
     else
     {
-        snprintf(stringbuf, sizeof(stringbuf), "Press space to continue render! %i iterations done, %i image pixels, %i shadow pixels.", itersdone, pixelswritten, shadowswritten);
-        // drawText(64, 574, stringbuf, r, g, b);
+        snprintf(stringbuf, sizeof(stringbuf), "Press space to continue render! %ld iterations done, %ld image pixels, %ld shadow pixels.", itersdone, pixelswritten, shadowswritten);
+        drawText(64, 574, stringbuf, r, g, b);
     }
 } // spacemess.
 
@@ -2650,10 +2500,10 @@ void spacemess(void)
  * --------------------------------------------------------------------- */
 void pixelsmess(void)
 {
-    snprintf(stringbuf, sizeof(stringbuf), "%i iterations done, %i image pixels, %i shadow pixels.  (press [V] to clear view).", itersdone, pixelswritten, shadowswritten);
+    snprintf(stringbuf, sizeof(stringbuf), "%ld iterations done, %ld image pixels, %ld shadow pixels.  (press [V] to clear view).", itersdone, pixelswritten, shadowswritten);
     float r, g, b;
     unpackColor(txcol[showbackground], &r, &g, &b);
-    // drawText(192, 2, stringbuf, r, g, b);
+    drawText(192, 2, stringbuf, r, g, b);
 } // pixelsmess.
 
 /* --------------------------------------------------------------------- *
@@ -2666,12 +2516,12 @@ void printsceneinfo(void)
     tmp = 8;
     float r, g, b;
     unpackColor(0x00000080, &r, &g, &b);
-    // drawText(701, 65 + 0 * tmp, textbrmess[selnumbranch], r, g, b);
-    // drawText(701, 65 + 1 * tmp, textbgmess[showbackground], r, g, b);
-    // drawText(701, 65 + 2 * tmp, textgrmess[groundsize], r, g, b);
-    // drawText(701, 65 + 3 * tmp, textlight[lightness], r, g, b);
-    // drawText(701, 65 + 4 * tmp, textpales[whitershade], r, g, b);
-    // drawText(701, 65 + 5 * tmp, textfunky[colourmode], r, g, b);
+    drawText(701, 65 + 0 * tmp, textbrmess[selnumbranch], r, g, b);
+    drawText(701, 65 + 1 * tmp, textbgmess[showbackground], r, g, b);
+    drawText(701, 65 + 2 * tmp, textgrmess[groundsize], r, g, b);
+    drawText(701, 65 + 3 * tmp, textlight[lightness], r, g, b);
+    drawText(701, 65 + 4 * tmp, textpales[whitershade], r, g, b);
+    drawText(701, 65 + 5 * tmp, textfunky[colourmode], r, g, b);
     return;
 } // printcoordinfo.
 
@@ -2683,16 +2533,16 @@ void printtreeinfo(void)
     TEXTBOX(670, 10, 784, 60, 0x00A0A0A0, 0x00FFFFFF);
     lcol = 0x00000080;
     tmp = 12;
-    // float r, g, b;
-    // unpackColor(lcol, &r, &g, &b);
-    // snprintf(stringbuf, sizeof(stringbuf), "Now growing tree #%02i.", ((treeinuse + 1) & 0x1F));
-    // drawText(672, 10 + tmp * 0, stringbuf, r, g, b);
-    // snprintf(stringbuf, sizeof(stringbuf),"Name:%s.", trees[treeinuse].name);
-    // drawText(672, 10 + tmp * 1, stringbuf, r, g, b);
-    // snprintf(stringbuf, sizeof(stringbuf),"%s.", textbrmess[trees[treeinuse].branches - 1]);
-    // drawText(672, 10 + tmp * 2, stringbuf, r, g, b);
-    // snprintf(stringbuf, sizeof(stringbuf),"Uh=%i Gs=%i Sbh=%i Ut=%i", trees[treeinuse].usehig, trees[treeinuse].glblscl, trees[treeinuse].sctrnsl, trees[treeinuse].usetwst);
-    // drawText(672, 10 + tmp * 3, stringbuf, r, g, b);
+    float r, g, b;
+    unpackColor(lcol, &r, &g, &b);
+    snprintf(stringbuf, sizeof(stringbuf), "Now growing tree #%02i.", ((treeinuse + 1) & 0x1F));
+    drawText(672, 10 + tmp * 0, stringbuf, r, g, b);
+    snprintf(stringbuf, sizeof(stringbuf),"Name:%s.", trees[treeinuse].name);
+    drawText(672, 10 + tmp * 1, stringbuf, r, g, b);
+    snprintf(stringbuf, sizeof(stringbuf),"%s.", textbrmess[trees[treeinuse].branches - 1]);
+    drawText(672, 10 + tmp * 2, stringbuf, r, g, b);
+    snprintf(stringbuf, sizeof(stringbuf),"Uh=%i Gs=%i Sbh=%i Ut=%i", trees[treeinuse].usehig, trees[treeinuse].glblscl, trees[treeinuse].sctrnsl, trees[treeinuse].usetwst);
+    drawText(672, 10 + tmp * 3, stringbuf, r, g, b);
     return;
 } // printcoordinfo.
 
@@ -2858,16 +2708,16 @@ void CreatePalette(void)
         freq = bf * ufade0 * sqrt(ufade0);
         bl = (1.0f + cos(freq)) * 0.5f;
 
-        if (lightobject)
-            if (vertin)
-            {
+        if (lightobject) {
+            if (vertin) {
                 length = sqrt(rl*rl + gl*gl + bl*bl) * 2.0f;
                 rl = ((1.0f + rl) / length) * fdin;
                 gl = ((1.0f + gl) / length) * fdin;
                 bl = ((1.0f + bl) / length) * fdin;
-            }
-            else
+            } else {
                 rl = gl = bl = fdin2;
+            }
+        }
 
         if (heatvawe)
         {
@@ -3570,112 +3420,4 @@ void loadtrees ( void )
 
 #endif // USESETUPS
 
-  loadtree ( );
-
 } // loadtrees.
-/* -------------------------------------------------------------------- *
-			Open and read source file:
- * --------------------------------------------------------------------- */
-int opensource ( const char * fname )
-{
-  if ( NULL == ( infile = fopen ( fname, "r" ) ) )
-        return ( WASERROR );
-
- 	if ( 0 == ( filesize = fread ( tree, sizeof ( char ), sizeof ( tree [ 0 ] ) * 31, infile ) ) )
-        return ( WASERROR );
-
-  return ( WASNOERROR );
-} // opensource.
-
-/* --------------------------------------------------------------------- *
-		Load a trees:
- * --------------------------------------------------------------------- */
-void loadtree ( void )
-{
-  for ( i = 0; i < 31; i++ )
-  printf("Loading tree %d\n", i);
-  {
-        memcpy(trees[i].name, tree[i].name, sizeof(trees[i].name) - 1);
-        trees[i].name[sizeof(trees[i].name) - 1] = '\0';
-        trees [ i ].name [ 15 ] = 0;
-		trees [ i ].branches = tree [ i ].branches;
-		trees [ i ].usehig = tree [ i ].usehig;
-		trees [ i ].glblscl = tree [ i ].glblscl;
-		trees [ i ].sctrnsl = tree [ i ].sctrnsl;
-		trees [ i ].usetwst = tree [ i ].usetwst;
-		trees [ i ].radius = tree [ i ].radius;
- 		trees [ i ].height = tree [ i ].height;
-        
- 		branches [ i ] [ 0 ].height = tree [ i ].height0;
-		branches [ i ] [ 0 ].scale = tree [ i ].scale0;
- 		branches [ i ] [ 0 ].leanc = tree [ i ].leanc0;
- 		branches [ i ] [ 0 ].leans = tree [ i ].leans0;
- 		branches [ i ] [ 0 ].rotatec = tree [ i ].rotatec0;
- 		branches [ i ] [ 0 ].rotates = tree [ i ].rotates0;
- 		branches [ i ] [ 0 ].twistc = tree [ i ].twistc0;
- 		branches [ i ] [ 0 ].twists = tree [ i ].twists0;
-
- 		branches [ i ] [ 1 ].height = tree [ i ].height1;
-		branches [ i ] [ 1 ].scale = tree [ i ].scale1;
- 		branches [ i ] [ 1 ].leanc = tree [ i ].leanc1;
- 		branches [ i ] [ 1 ].leans = tree [ i ].leans1;
- 		branches [ i ] [ 1 ].rotatec = tree [ i ].rotatec1;
- 		branches [ i ] [ 1 ].rotates = tree [ i ].rotates1;
- 		branches [ i ] [ 1 ].twistc = tree [ i ].twistc1;
- 		branches [ i ] [ 1 ].twists = tree [ i ].twists1;
-
- 		branches [ i ] [ 2 ].height = tree [ i ].height2;
-		branches [ i ] [ 2 ].scale = tree [ i ].scale2;
- 		branches [ i ] [ 2 ].leanc = tree [ i ].leanc2;
- 		branches [ i ] [ 2 ].leans = tree [ i ].leans2;
- 		branches [ i ] [ 2 ].rotatec = tree [ i ].rotatec2;
- 		branches [ i ] [ 2 ].rotates = tree [ i ].rotates2;
- 		branches [ i ] [ 2 ].twistc = tree [ i ].twistc2;
- 		branches [ i ] [ 2 ].twists = tree [ i ].twists2;
-
- 		branches [ i ] [ 3 ].height = tree [ i ].height3;
-		branches [ i ] [ 3 ].scale = tree [ i ].scale3;
- 		branches [ i ] [ 3 ].leanc = tree [ i ].leanc3;
- 		branches [ i ] [ 3 ].leans = tree [ i ].leans3;
- 		branches [ i ] [ 3 ].rotatec = tree [ i ].rotatec3;
- 		branches [ i ] [ 3 ].rotates = tree [ i ].rotates3;
- 		branches [ i ] [ 3 ].twistc = tree [ i ].twistc3;
- 		branches [ i ] [ 3 ].twists = tree [ i ].twists3;
-
- 		branches [ i ] [ 4 ].height = tree [ i ].height4;
-		branches [ i ] [ 4 ].scale = tree [ i ].scale4;
- 		branches [ i ] [ 4 ].leanc = tree [ i ].leanc4;
- 		branches [ i ] [ 4 ].leans = tree [ i ].leans4;
- 		branches [ i ] [ 4 ].rotatec = tree [ i ].rotatec4;
- 		branches [ i ] [ 4 ].rotates = tree [ i ].rotates4;
- 		branches [ i ] [ 4 ].twistc = tree [ i ].twistc4;
- 		branches [ i ] [ 4 ].twists = tree [ i ].twists4;
-
- 		branches [ i ] [ 5 ].height = tree [ i ].height5;
-		branches [ i ] [ 5 ].scale = tree [ i ].scale5;
- 		branches [ i ] [ 5 ].leanc = tree [ i ].leanc5;
- 		branches [ i ] [ 5 ].leans = tree [ i ].leans5;
- 		branches [ i ] [ 5 ].rotatec = tree [ i ].rotatec5;
- 		branches [ i ] [ 5 ].rotates = tree [ i ].rotates5;
- 		branches [ i ] [ 5 ].twistc = tree [ i ].twistc5;
- 		branches [ i ] [ 5 ].twists = tree [ i ].twists5;
-
- 		branches [ i ] [ 6 ].height = tree [ i ].height6;
-		branches [ i ] [ 6 ].scale = tree [ i ].scale6;
- 		branches [ i ] [ 6 ].leanc = tree [ i ].leanc6;
- 		branches [ i ] [ 6 ].leans = tree [ i ].leans6;
- 		branches [ i ] [ 6 ].rotatec = tree [ i ].rotatec6;
- 		branches [ i ] [ 6 ].rotates = tree [ i ].rotates6;
- 		branches [ i ] [ 6 ].twistc = tree [ i ].twistc6;
- 		branches [ i ] [ 6 ].twists = tree [ i ].twists6;
-
- 		branches [ i ] [ 7 ].height = tree [ i ].height7;
-		branches [ i ] [ 7 ].scale = tree [ i ].scale7;
- 		branches [ i ] [ 7 ].leanc = tree [ i ].leanc7;
- 		branches [ i ] [ 7 ].leans = tree [ i ].leans7;
- 		branches [ i ] [ 7 ].rotatec = tree [ i ].rotatec7;
- 		branches [ i ] [ 7 ].rotates = tree [ i ].rotates7;
- 		branches [ i ] [ 7 ].twistc = tree [ i ].twistc7;
- 		branches [ i ] [ 7 ].twists = tree [ i ].twists7;
-  } // forlooping
-} // loadtree.

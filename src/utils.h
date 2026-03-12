@@ -1,3 +1,5 @@
+#include <vector>
+
 #define NAME 		"3D L-system Tree Generator"
 #define RND 		( ( float ) rand ( ) / RAND_MAX )
 #define RNDBOOL	( 0 == int ( RND * 2 ) )
@@ -142,12 +144,10 @@ void initiateIFS(void);
 void leafcols(void);
 void LitAng(void);
 void loadtrees(void);
-void loadtree(void);
 // void manual(void);
 void newrender(void);
 void newsetup(void);
 void setupQuad(void);
-int opensource(const char* fname);
 void pixelsmess(void);
 void printsceneinfo(void);
 void printtreeinfo(void);
@@ -176,6 +176,7 @@ void drawScreenTexture(void);
 GLuint loadTexture(const std::vector<unsigned char>& data, int width, int height);
 void renderText(const char* text, float x, float y, float scale, uint32_t color);
 void drawText(float x, float y, const char* text, float r, float g, float b);
+void drawInfoScreen(void);
 void unpackColor(unsigned int col, float *r, float *g, float *b);
 uint32_t* getPixelBufferPtr();
 void simulateKeyPress(int key);

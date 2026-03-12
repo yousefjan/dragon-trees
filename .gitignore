@@ -1,3 +1,5 @@
 .vscode/
 tree
+src/tree
+build/
 .DS_Store

@@ -1,92 +1,241 @@
-# Dragon Tree IFS
+# Dragon Trees
 
-This project renders L-system fractal trees, inspired by Solkoll's implementation (archived [here](https://web.archive.org/web/20080622061317/http://web.comhem.se/solgrop/3dtree.htm)) used to generate such images used on Wikipedia (found [here](https://classes.engineering.wustl.edu/cse425s/index.php?title=File:Dragon_trees.jpg)). The original code was based on MS DirectX API. This version has been fully reworked to use OpenGL.
+Real-time fractal tree renderer built with C++17, GLFW, GLEW, and OpenGL.
 
----
-
-
+Trees are generated using an Iterated Function System (IFS) / chaos-game style loop, writes to CPU-side color/depth buffers, then presents the final frame through a textured OpenGL fullscreen quad. This project is inspired by Solkoll's implementation (archived [here](https://web.archive.org/web/20080622061317/http://web.comhem.se/solgrop/3dtree.htm)) used to generate such images used on Wikipedia (found [here](https://classes.engineering.wustl.edu/cse425s/index.php?title=File:Dragon_trees.jpg)). The original code was based on MS DirectX API. This version has been fully reworked to use OpenGL.
 
 ![Tree 1](examples/tree1.png)
 
----
+## Requirements (macOS)
 
-### Prerequisites
+- Xcode Command Line Tools
+- CMake 3.20+
+- Homebrew packages:
+  - `glfw`
+  - `glew`
 
-- OpenGL
-- C++17 or later
-- GLFW
-- GLAD or GLEW
-
-### Building
+Install dependencies:
 
 ```bash
-git clone https://github.com/yousefjan/dragon_tree_IFS.git
-cd src
-g++ -std=c++17 -I/opt/homebrew/include -L/opt/homebrew/lib -lGLEW -lglfw -framework OpenGL src/tree.cpp -o src/tree
-./tree
+brew install cmake glfw glew
 ```
 
-### Explanation
+## Build
 
-__Core Rendering and Setup:__
+From the repository root:
 
-- __`main(int argc, char** argv)`__: The entry point of the application. It initializes the system (`doInit`), sets up IFS parameters (`initiateIFS`), and then enters the main loop. Inside the loop, it processes input (`processInput`), performs the IFS calculations and rendering logic (`DoMyStuff`), renders the result to an OpenGL texture (`renderToTexture`), draws that texture to the screen (`drawScreenTexture`), and handles GLFW events.
-- __`doInit(void)`__: Initializes GLFW for window creation, sets up an OpenGL context, initializes GLEW, and sets up some basic program constants (like pi, radian conversion, screen ratio). It also initializes the main pixel buffer.
-- __`initOpenGL(void)`__: Initializes GLEW, creates shader programs (`createShaders`), sets up a quad for rendering the screen texture (`setupQuad`), and configures the framebuffer (`setupFramebuffer`).
-- __`createShaders(void)`__: Compiles a simple vertex and fragment shader. The vertex shader passes through position and texture coordinates, and the fragment shader samples from the screen texture. This is used to display the contents of `pixelBuffer` on the screen.
-- __`setupQuad(void)`__: Creates a Vertex Array Object (VAO) and Vertex Buffer Object (VBO) for a full-screen quad. This quad is used to draw the `screenTexture`.
-- __`setupFramebuffer(void)`__: Creates an OpenGL texture (`screenTexture`) that will be used as the target for rendering. The contents of the `pixelBuffer` (where the CPU-side rendering happens) are copied to this texture.
-- __`renderToTexture(void)`__: Copies the contents of the `pixelBuffer` (which is updated by `DoMyStuff` and `showpic`) to the `screenTexture` using `glTexSubImage2D`.
-- __`drawScreenTexture(void)`__: Clears the OpenGL screen, uses the shader program, binds the `screenTexture`, and draws the quad, effectively displaying the rendered image.
-- __`finiObjects(void)`__: Cleans up OpenGL resources (textures, framebuffers, shaders, VAO, VBO) when the program exits.
+```bash
+cmake -S . -B build
+cmake --build build --config Release
+```
 
-__IFS (Iterated Function System) Logic:__
+## Run
 
-- __`initiateIFS(void)`__: Loads preset tree definitions (`loadtrees`), sets up a new fractal set (`newsetup`), creates a color palette (`CreatePalette`), and clears initial buffers.
-- __`DoMyStuff(void)`__: This is the heart of the fractal generation. It iteratively applies transformations to points to generate the tree structure. It handles rendering for the stem/branches, the ground plane, and foliage based on various flags (`logfoliage`, `useLoCoS`, `showbackground`). It uses a batching system (`pixelBatch`) to collect pixels and then sorts them by Z-depth before drawing to the `pict` buffer.
-- __`IFSlight(void)`__: Calculates the lighting for a given 3D point. It considers the light source direction, surface normal (if `donormal` is true), and applies effects like glow. It updates a shadow map (`light` buffer) if `doshadow` is true.
-- __`newrender(void)`__: Resets parameters for starting a new rendering pass, such as initial IFS coordinates, colors, palette index, and brightness calibration values.
-- __`newsetup(void)`__: Initializes parameters for generating a new tree. This includes setting up scale ratios, defining the ground plane IFS (`createbackground`), randomizing parameters for the "Random Tree" (preset #31), setting up leaf and stem colors (`leafcols`, `stemcols`), and configuring light and camera angles.
-- __`randombranch(int indx)`__: Randomizes the parameters (height, scale, lean, rotation, twist) for a specific branch of the "Random Tree" (preset #31).
-- __`createbackground(void)`__: Defines the IFS transformations (translation, scale, colors) for rendering the 2D Sierpinski square-based ground plane.
-- __`leafcols(void)`__: Randomizes colors for the tree leaves based on the current `colourmode`.
-- __`stemcols(void)`__: Sets up a predefined set of colors for different levels of the tree stem/branches.
+```bash
+./build/dragon_trees
+```
 
-__Input Handling:__
+## Controls
 
-- __`error_callback(int error, const char* description)`__: A GLFW callback function that is called when a GLFW error occurs. It prints the error to `stderr`.
-- __`key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)`__: A GLFW callback for keyboard input. It updates `keyStates` (key currently down) and `keyPressed` (key just pressed this frame).
-- __`processInput(void)`__: Checks the `keyPressed` array for various keys and triggers corresponding actions. This function is responsible for changing rendering parameters, camera angles, tree types, colors, zoom levels, and toggling between rendering mode and an info screen mode (in progress).
+- `Space`: toggle render/info screen
+- `Esc`: quit
+- `Arrow keys`: rotate camera
+- `Page Up` / `Page Down`: zoom
+- `Home`: reset view
+- `M`: next tree preset
+- `R`: random tree preset
+- `N`: cycle branch-count mode
+- `I`: show scene/tree info
+- `B`, `G`, `L`, `W`, `O`, `P`: scene and palette tweaks
 
-__Geometric Transformations and Math:__
+## Project Structure
 
-- __`Q_rsqrt(float number)`__: Implements the "Fast Inverse Square Root" algorithm, a computationally efficient way to calculate `1/sqrt(x)`.
-- __`sign(double x)`__: Returns -1 if x is negative, 1 otherwise.
-- __`rotateview(void)`__: Applies 3D rotation to global coordinates `xt`, `yt`, `zt` to transform them into the camera's view space using `rxx`, `rxy`, `ryx`, `ryy` (cos/sin of camera angles).
-- __`unrotateview(void)`__: Performs the inverse of `rotateview`.
-- __`rotatelight(void)`__: Applies 3D rotation to transform coordinates into the light's reference frame using `lrxx`, `lrxy`, `lryx`, `lryy`.
-- __`unrotatelight(void)`__: Performs the inverse of `rotatelight`.
-- __`LitAng(void)`__: Calculates and stores the cosine and sine (`lrxx`, `lrxy`, `lryx`, `lryy`) of the current light rotation angles (`lrxv`, `lryv`).
-- __`CamAng(void)`__: Calculates and stores the cosine and sine (`rxx`, `rxy`, `ryx`, `ryy`) of the current camera rotation angles (`rxv`, `ryv`).
+- `src/tree.cpp`: core fractal simulation, tree setup, input handling, and UI state
+- `src/gl_present.cpp`: OpenGL init/shader/quad setup and final buffer presentation
+- `src/utils.h`: shared constants, structs, and function declarations
+- `src/trees.txt`: legacy human-readable preset source reference
 
-__Buffer Management and Drawing Utilities:__
+## Notes
 
-- __`getPixelBufferPtr(void)`__: Returns a pointer to the main `pixelBuffer`.
-- __`clearallbufs(uint32_t RGBdata)`__: Clears the shadow map (`light` buffer), pixel buffer (`pict`), and Z-buffer (`bpict`). Resets `shadowswritten` and `lockshadow`.
-- __`clearscreenbufs(uint32_t RGBdata)`__: Clears the `pict` buffer (image data) and `bpict` (Z-buffer) with `RGBdata`. Resets `itersdone` and `pixelswritten`.
-- __`clearscreen(uint32_t RGBdata)`__: Fills the `pixelBuffer` (the one copied to the GPU texture) with a specified color.
-- __`showpic(void)`__: Copies data from the `pict` buffer (higher resolution, where individual IFS points are plotted) to the `pixelBuffer` (screen resolution). It performs a 2x2 averaging (a simple form of anti-aliasing) in the process.
-- __`unpackColor(unsigned int col, float *r, float *g, float *b)`__: Converts a 32-bit integer color (ABGR or similar) into separate float components (0.0 to 1.0) for red, green, and blue. This is used for OpenGL functions that expect float colors.
-- __`drawLine(void)`, `drawMulticolLine(void)`, `drawBox(void)`, `drawBoxi(void)`__: Utility functions for drawing lines and boxes directly into the `pixelBuffer`. These seem to be for UI elements or debugging, and their usage in the current rendering loop is minimal or non-existent for the main fractal.
-- __`CreatePalette(void)`__: Generates a procedural color palette (`lpCols`) with various randomized effects (inversion, heatwave, sine wave).
-- __`ShowPalette(int mode)`__: Renders the `lpCols` palette to a region of the `pixelBuffer` for display.
+- This codebase is currently optimized for macOS portfolio presentation and local reproducibility.
+- The renderer intentionally keeps the original CPU-buffer + accumulation approach to preserve the visual style.
 
-__File I/O and Data Loading:__
 
-- __`loadtrees(void)`__: Initializes some hardcoded tree structures (`branches` and `trees` arrays) with default and specific preset values (e.g., "Sierpinski Tree", "Levy curve Tree"). It then calls `loadtree()` which seems intended to load from a file.
-- __`opensource(const char * fname)`__: Opens the specified file ("trees.IFS" or "trees.txt") and reads its content into a global `tree` array (of `ATREE` structs).
-- __`loadtree(void)`__: Copies data from the global `tree` array (populated by `opensource`) into the main `trees` and `branches` arrays used by the rendering logic. This function has a `printf` statement that indicates it's loading trees one by one.
+## Explanation
 
-__UI Text and Info Display:__
+### 1. Overview
 
-- In progress...
+The program uses the **Chaos Game** algorithm (a method of creating Iterated Function Systems) to visualize tree-like structures. Unlike standard 3D modelers that use polygons (meshes), this program generates volume and shape by plotting millions of individual points. Each point represents a potential particle in the fractal structure.
+
+This approach follows the design of the original early-2000s implementation and reflects how Iterated Function System (IFS) fractals are naturally defined. Rather than describing a continuous surface, an IFS converges to a probability distribution of points known as the attractor. Plotting points therefore represents the structure directly, without needing surface reconstruction. Historically this method also allowed complex fractal scenes to be rendered on modest hardware, since it requires very little geometry storage and relies only on simple iterative transformations.
+
+The core idea is that a tree is self-similar: a branch looks like a smaller version of the whole tree. By mathematically defining how a "branch" transforms relative to its "stem", we can infinitely repeat this process to create organic-looking structures.
+
+### 2. Core Logic: Iterated Function Systems (IFS)
+
+The heart of the program relies on **IFS**. An IFS is a set of affine transformations (scaling, rotation, translation).
+
+#### The Chaos Game Algorithm
+The program renders trees using a specific Monte Carlo method known as the Chaos Game:
+1.  Start with a random 3D point $(x, y, z)$ in space.
+2.  Iteratively apply one of several defined **transformations** (rules) to this point.
+    -   One rule represents the "stem" (usually just moving up).
+    -   Other rules represent "branches" (scaling down, rotating, and moving up).
+3.  At each step, a rule is chosen randomly.
+4.  After many iterations, the point converges to the "attractor" of the system (the shape of the tree).
+5.  The program continuously plots these points to the screen, building up the image over time.
+
+#### The Tree Metaphor
+In this codebase, an IFS is defined by:
+-   **Stem**: The main trunk.
+-   **Branches**: Offshoots from the trunk.
+
+Each branch is defined by:
+-   **Scale**: How much smaller it is than the parent.
+-   **Lean**: Angle away from the vertical axis (Z-axis rotation).
+-   **Rotate**: Angle around the trunk (Y-axis rotation).
+-   **Twist**: Torsion around its own axis.
+-   **Height**: Where on the parent stem it starts.
+
+### 3. Mathematical Transformations
+
+The program does not use standard 4x4 matrices for transformations. Instead, it manually applies rotation and translation formulas to 3D coordinates $(x, y, z)$ and their normal vectors $(nx, ny, nz)$.
+
+#### Coordinate System
+-   **Y-axis**: Vertical (Up/Down). The trees grow along the Y-axis.
+-   **X/Z-axes**: Ground plane.
+
+#### Transformation Steps (in `DoMyStuff`)
+
+For every iteration, the program applies the inverse transformations in reverse order of operation to move a point "up" the tree structure.
+
+##### 1. Twist (Rotation around Y-axis local to branch)
+Rotates the point $(x, z)$ by the twist angle $\theta_t$.
+$$
+x' = x \cos(\theta_t) - z \sin(\theta_t) \\
+z' = x \sin(\theta_t) + z \cos(\theta_t)
+$$
+
+##### 2. Lean (Rotation around Z-axis)
+ tilts the branch away from the trunk by angle $\phi$.
+$$
+x'' = x' \cos(\phi) - y \sin(\phi) \\
+y' = x' \sin(\phi) + y \cos(\phi)
+$$
+
+##### 3. Rotate (Rotation around Y-axis global)
+Rotates the branch around the parent trunk by angle $\psi$.
+$$
+x''' = x'' \cos(\psi) - z' \sin(\psi) \\
+z'' = x'' \sin(\psi) + z' \cos(\psi)
+$$
+
+##### 4. Scale
+Shrinks the point.
+$$
+x_{final} = x''' \cdot s \\
+y_{final} = y' \cdot s \\
+z_{final} = z'' \cdot s
+$$
+*Note: Scaling logic varies based on `glblscl` (global scale) or per-branch scale flags.*
+
+##### 5. Translate
+Moves the branch up the stem.
+$$
+y_{final} += H
+$$
+Where $H$ is the tree height or branch attachment height.
+
+#### Normal Vectors
+Crucially, the program also transforms a **Normal Vector** $(nx, ny, nz)$ alongside the position. The normal vector represents the direction the surface is facing at that point. It undergoes Rotation and Twist but **not** Translation (vectors represent direction, not position). This allows for realistic lighting calculations later.
+
+### 4. Rendering Pipeline
+
+The rendering happens in the `DoMyStuff` function in `src/tree.cpp`.
+
+1.  **Point Generation**:
+    -   A batch of iterations (e.g., 20,000) is run per frame.
+    -   For each iteration, a random branch rule is selected.
+    -   The mathematical transformations described above are applied.
+    -   The resulting 3D point $(x_t, y_t, z_t)$ represents a spot on the tree.
+
+2.  **Lighting Calculation (`IFSlight`)**:
+    -   The program calculates the dot product between the transformed Normal Vector and a Light Vector.
+    -   $Intensity = \vec{N} \cdot \vec{L}$
+    -   This determines the brightness of the pixel (Lambertian reflection).
+
+3.  **3D to 2D Projection**:
+    -   The 3D point is rotated according to the Camera Angle (`rotateview`).
+    -   Perspective projection is applied:
+        $$
+        scale = \frac{constant}{distance}
+        $$
+        $$
+        x_{screen} = x_{world} \cdot scale + CenterX
+        $$
+        $$
+        y_{screen} = y_{world} \cdot scale + CenterY
+        $$
+
+4.  **Z-Buffering**:
+    -   The program maintains a **Depth Buffer** (`bpict` or `nZ`).
+    -   Before drawing a pixel, it checks if the new point is closer to the camera than what's already drawn.
+    -   If closer, it updates the pixel color and the Z-buffer value.
+
+### 5. Code Structure
+
+#### Key Files
+-   `src/tree.cpp`: The main entry point. Contains the game loop, rendering logic (`DoMyStuff`), and input handling.
+-   `src/atree.h` & `src/utils.h`: Defines the data structures.
+-   `src/trees.IFS`: A text configuration file defining the preset trees.
+
+#### Important Functions
+-   `loadtrees()`: Hardcoded initialization of tree parameters (Sierpinski, Dragon Tree, etc.) into the `trees[]` array.
+-   `initiateIFS()`: Pre-calculates trigonometric values (sin/cos) for efficiency.
+-   `DoMyStuff()`: The main "render" loop. It runs the Chaos Game algorithm, accumulating pixels into the buffer.
+-   `processInput()`: Handles keyboard interaction (rotating view, changing trees, zooming).
+
+#### Data Structures
+-   `struct ATREE`: Represents a full tree definition.
+    -   `branches`: Number of branches.
+    -   `radius`, `height`: Dimensions.
+    -   `scale0`, `rotate0`, `lean0`...: Raw parameters for branches.
+-   `struct DTBRA`: Represents a single branch's parameters (scale, lean, rotate, twist).
+-   `struct DTIFS`: A cleaner representation of a tree containing an array of `DTBRA`.
+
+### 6. Algorithms in Detail
+
+#### The "Inverse" Approach
+The code iterates backwards from the "leaves" to the "root" or vice versa depending on interpretation, but mathematically it simulates the limit set of the contractions.
+```cpp
+for (pti = (ilevels - 1); pti >= 0; pti--) {
+    // Select random branch
+    di = 4 + int(RND * trees[treeinuse].branches);
+    
+    // Apply Transformations (Twist -> Lean -> Rotate -> Scale -> Translate)
+    // ... math code ...
+    
+    // Plot
+}
+```
+
+#### Shadow Mapping
+The program supports crude shadow mapping:
+1.  It projects points from the *Light's* perspective into a shadow Z-buffer (`light[][]`).
+2.  When rendering from the *Camera's* perspective, it checks if the point is "visible" to the light by comparing with the shadow buffer.
+
+#### Anti-Aliasing / Accumulation
+Because it plots points, the image effectively accumulates over time. The "Anti-Aliasing" here is actually just the high density of points smoothing out the shape. The `pixelswritten` counter tracks how much "paint" has been applied to the screen.
+
+### 7. Summary
+
+To understand this code, imagine you are drawing a tree by rolling a die.
+1.  You stand at the base.
+2.  Roll a die:
+    -   If 1: Move up a bit (Stem).
+    -   If 2: Shrink down, turn right, and move up (Branch 1).
+    -   If 3: Shrink down, turn left, and move up (Branch 2).
+3.  Mark a dot where you land.
+4.  Repeat millions of times.
+The resulting cloud of dots forms the 3D tree. The code simply defines the rules (how much to shrink/turn) and handles the math to put the dots on the screen.
+

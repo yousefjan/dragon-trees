@@ -7,6 +7,7 @@
 #include <math.h>
 #include <time.h>
 #include <functional>
+#include <array>
 #include <vector>
 #include <string>
 #include <fstream>
@@ -255,6 +256,7 @@ long pixelswritten = 0;            // Number of pixels written to the image Z-bu
 long spixelswritten;               // Storage for number of pixels written.
 long shadowswritten = 0;           // Number of pixels written to the shadow map Z-buffer.
 long sshadowswritten;              // Storage for number of shadows written.
+unsigned long renderFrameCounter = 0;
 int pti;                           // Index counter for IFS loop.
 double btx, bty, btz;              // Bottom plane 3D point.
 double dtx, dty, dtz;              // 3D point - the fractal.
@@ -343,6 +345,21 @@ int LoCoSPali = 0;
 bool keyStates[512]; // More than enough for all GLFW keys
 bool keyPressed[512]; // To track if a key was just pressed this frame
 
+struct BranchTransform {
+    float twistc;
+    float twists;
+    float leanc;
+    float leans;
+    float rotatec;
+    float rotates;
+    float scale;
+    float height;
+};
+
+std::array<BranchTransform, 8> cachedBranchTransforms;
+int cachedBranchTreeIndex = -1;
+bool branchCacheDirty = true;
+
 // Fast Inverse Square Root function
 float Q_rsqrt(float number) {
     static_assert(sizeof(float) == 4, "Q_rsqrt requires 32-bit float"); // Ensure float is 32-bit
@@ -383,6 +400,29 @@ int sign(double x)
     else
         return (1);
 } // sign.
+
+void refreshBranchTransformCache(void)
+{
+    if (!branchCacheDirty && cachedBranchTreeIndex == treeinuse) {
+        return;
+    }
+
+    for (int branchIndex = 0; branchIndex < trees[treeinuse].branches; ++branchIndex) {
+        cachedBranchTransforms[branchIndex] = {
+            static_cast<float>(branches[treeinuse][branchIndex].twistc),
+            static_cast<float>(branches[treeinuse][branchIndex].twists),
+            static_cast<float>(branches[treeinuse][branchIndex].leanc),
+            static_cast<float>(branches[treeinuse][branchIndex].leans),
+            static_cast<float>(branches[treeinuse][branchIndex].rotatec),
+            static_cast<float>(branches[treeinuse][branchIndex].rotates),
+            static_cast<float>(branches[treeinuse][branchIndex].scale),
+            static_cast<float>(branches[treeinuse][branchIndex].height)
+        };
+    }
+
+    cachedBranchTreeIndex = treeinuse;
+    branchCacheDirty = false;
+}
 
 
 
@@ -996,10 +1036,6 @@ int main(int argc, char** argv)
     while (!glfwWindowShouldClose(window)) {
         // Process input
         processInput();
-        // programMode = 0;
-        showpic();
-        newrender();
-
 
         if (programMode == 0 && renderactive) {
             DoMyStuff();
@@ -1125,10 +1161,19 @@ void DoMyStuff(void)
     // Don't count pixels written for bottom plane:
     spixelswritten = pixelswritten;
     sshadowswritten = shadowswritten;
+    renderFrameCounter++;
+    refreshBranchTransformCache();
 
-    // Create a single batch buffer for all elements (bottom plane, leaves, branches)
-    std::vector<std::tuple<int, int, uint32_t, int>> pixelBatch; // x, y, color, z-value
-    pixelBatch.reserve(1000000); // Pre-allocate space for all pixels
+    const DTIFS& activeTree = trees[treeinuse];
+    const int branchCount = activeTree.branches;
+    const bool useTwist = activeTree.usetwst;
+    const bool useGlobalScale = activeTree.glblscl;
+    const bool scaleByHeight = activeTree.sctrnsl;
+    const bool useHeights = activeTree.usehig;
+    const float treeHeight = static_cast<float>(activeTree.height);
+    const float globalScale = static_cast<float>(branches[treeinuse][0].scale);
+    const bool renderBackgroundThisFrame = (showbackground < 3) && ((renderFrameCounter & 0x3UL) == 0);
+    const bool renderFoliageThisFrame = (logfoliage != 1) && ((renderFrameCounter & 0x1UL) == 0);
 
     // ************************//
     // * Stem and Branches IFS //
@@ -1198,14 +1243,14 @@ void DoMyStuff(void)
                 // Create log!
                 angle = 360.0f * rad * RND;
                 t = RND;
-                x = trees[treeinuse].radius * branches[treeinuse][0].scale;
-                x = trees[treeinuse].radius - x;
-                x = trees[treeinuse].radius - t * x;
+                x = activeTree.radius * globalScale;
+                x = activeTree.radius - x;
+                x = activeTree.radius - t * x;
                 dtx = sin(angle) * x;
-                dty = t * trees[treeinuse].height;
+                dty = t * activeTree.height;
                 dtz = cos(angle) * x;
                 dntx = -sin(angle);
-                dnty = t * trees[treeinuse].height;
+                dnty = t * activeTree.height;
                 dntz = -cos(angle);
             break; // Logs.
         } // Switch useLoCoS.
@@ -1238,35 +1283,13 @@ void DoMyStuff(void)
         // printf("%i\n", ilevels);
 
         // Precalculate and cache branch transform data
-        struct BranchTransform {
-            float twistc, twists, leanc, leans, rotatec, rotates;
-            float scale, height;
-        };
-
-        std::vector<BranchTransform> cachedBranchTransforms;
-        cachedBranchTransforms.resize(trees[treeinuse].branches);
-
-        for (int i = 0; i < trees[treeinuse].branches; i++) {
-            // Explicitly cast each value to float, or add 'f' suffix to literals
-            cachedBranchTransforms[i] = {
-                static_cast<float>(branches[treeinuse][i].twistc),
-                static_cast<float>(branches[treeinuse][i].twists),
-                static_cast<float>(branches[treeinuse][i].leanc),
-                static_cast<float>(branches[treeinuse][i].leans),
-                static_cast<float>(branches[treeinuse][i].rotatec),
-                static_cast<float>(branches[treeinuse][i].rotates),
-                static_cast<float>(branches[treeinuse][i].scale),
-                static_cast<float>(branches[treeinuse][i].height)
-            };
-        }
-
         // Process iterations for branches and stem
         for (int batch = 0; batch < 20000; batch++) {
             // IFS-snurran!
             for (pti = (ilevels - 1); pti >= 0; pti--)
             {
                 itersdone++;
-                di = 4 + int(RND * trees[treeinuse].branches);
+                di = 4 + int(RND * branchCount);
 
                 // Translate to scene:
                 xt = dtx + CPOSX;
@@ -1342,9 +1365,11 @@ void DoMyStuff(void)
                             cbt = ((cbt * bright) >> 8) & 0xFF;
                             tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
                             
-                            // Add to batch
-                            pixelBatch.emplace_back(nX, nY, tcolor, nZ);
-                            pixelswritten++;
+                            if (bpict[nY][nX] < nZ) {
+                                bpict[nY][nX] = nZ;
+                                pict[nY][nX] = tcolor;
+                                pixelswritten++;
+                            }
                         }
                     }
                 }
@@ -1354,7 +1379,7 @@ void DoMyStuff(void)
                 // Rotations:
                 i = di - 4;
                 // Twist:
-                if (trees[treeinuse].usetwst)
+                if (useTwist)
                 {
                     t = cachedBranchTransforms[i].twistc * dtz - cachedBranchTransforms[i].twists * dtx;
                     dtx = cachedBranchTransforms[i].twistc * dtx + cachedBranchTransforms[i].twists * dtz;
@@ -1371,11 +1396,11 @@ void DoMyStuff(void)
 
                 // Scale!
                 // Global scale?
-                if (trees[treeinuse].glblscl)
+                if (useGlobalScale)
                 {
-                    dtx *= branches[treeinuse][0].scale;
-                    dty *= branches[treeinuse][0].scale;
-                    dtz *= branches[treeinuse][0].scale;
+                    dtx *= globalScale;
+                    dty *= globalScale;
+                    dtz *= globalScale;
                 }
                 // No!, all diffrent:
                 else
@@ -1386,7 +1411,7 @@ void DoMyStuff(void)
                 }
 
                 // Scale by heigth of branch?
-                if (trees[treeinuse].sctrnsl)
+                if (scaleByHeight)
                 {
                     dtx *= cachedBranchTransforms[i].height;
                     dty *= cachedBranchTransforms[i].height;
@@ -1395,16 +1420,16 @@ void DoMyStuff(void)
 
                 // Translate!
                 // Use heights?
-                if (trees[treeinuse].usehig)
-                    dty += trees[treeinuse].height * cachedBranchTransforms[i].height;
+                if (useHeights)
+                    dty += treeHeight * cachedBranchTransforms[i].height;
                 // No!, all at top of stem:
                 else
-                    dty += trees[treeinuse].height;
+                    dty += treeHeight;
 
                 // ** Pixel normal ** //
                 // Rotations:
                 // Do twist?:
-                if (trees[treeinuse].usetwst)
+                if (useTwist)
                 {
                     t = cachedBranchTransforms[i].twistc * dntz - cachedBranchTransforms[i].twists * dntx;
                     dntx = cachedBranchTransforms[i].twistc * dntx + cachedBranchTransforms[i].twists * dntz;
@@ -1421,11 +1446,11 @@ void DoMyStuff(void)
 
                 // Scale!
                 // Global scale?
-                if (trees[treeinuse].glblscl)
+                if (useGlobalScale)
                 {
-                    dntx *= branches[treeinuse][0].scale;
-                    dnty *= branches[treeinuse][0].scale;
-                    dntz *= branches[treeinuse][0].scale;
+                    dntx *= globalScale;
+                    dnty *= globalScale;
+                    dntz *= globalScale;
                 }
                 // No!, all diffrent:
                 else
@@ -1436,7 +1461,7 @@ void DoMyStuff(void)
                 }
 
                 // Scale by heigth of branch?
-                if (trees[treeinuse].sctrnsl)
+                if (scaleByHeight)
                 {
                     dntx *= cachedBranchTransforms[i].height;
                     dnty *= cachedBranchTransforms[i].height;
@@ -1445,11 +1470,11 @@ void DoMyStuff(void)
 
                 // Translate!
                 // Use heights?
-                if (trees[treeinuse].usehig)
-                    dnty += trees[treeinuse].height * cachedBranchTransforms[i].height;
+                if (useHeights)
+                    dnty += treeHeight * cachedBranchTransforms[i].height;
                 // No!, all at top of stem:
                 else
-                    dnty += trees[treeinuse].height;
+                    dnty += treeHeight;
 
                 // Re-normalize!
                 dntx -= dtx;
@@ -1477,7 +1502,7 @@ void DoMyStuff(void)
     // ************************* //
     // * Plane ********* IFS ! * //
     // ************************* //
-    if (showbackground < 3)
+    if (renderBackgroundThisFrame)
     {
         // Turn glow on:
         useglow = true;
@@ -1507,7 +1532,11 @@ void DoMyStuff(void)
                     {
                         blargel = t;
                     }
-                    t = pow((1.0f - t / blargel), 16.0f);
+                    t = 1.0f - t / blargel;
+                    t *= t;
+                    t *= t;
+                    t *= t;
+                    t *= t;
                     bglow = (bglow + t) / 2.0f;
                 }
 
@@ -1596,9 +1625,11 @@ void DoMyStuff(void)
                             cbt = ((cbt * bright) >> 8) & 0xFF;
                             tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
                             
-                            // Add to batch
-                            pixelBatch.emplace_back(nX, nY, tcolor, nZ);
-                            pixelswritten++;
+                            if (bpict[nY][nX] < nZ) {
+                                bpict[nY][nX] = nZ;
+                                pict[nY][nX] = tcolor;
+                                pixelswritten++;
+                            }
                         }
                     }
                 }
@@ -1609,7 +1640,7 @@ void DoMyStuff(void)
     // ************************//
     // * Foliage ******* IFS ! //
     // ************************//
-    if (logfoliage != 1)
+    if (renderFoliageThisFrame)
     {
         // Coordinate:
         dtx = xbuf[ui];
@@ -1635,7 +1666,7 @@ void DoMyStuff(void)
             for (pti = 8; pti >= 0; pti--)
             {
                 itersdone++;
-                di = 4 + int(RND * trees[treeinuse].branches);
+                di = 4 + int(RND * branchCount);
 
                 // Translate to scene:
                 xt = dtx + CPOSX;
@@ -1711,9 +1742,11 @@ void DoMyStuff(void)
                             cbt = ((cbt * bright) >> 8) & 0xFF;
                             tcolor = ((crt << 16) + (cgt << 8) + cbt) & 0xFFFFFF;
                             
-                            // Add to batch
-                            pixelBatch.emplace_back(nX, nY, tcolor, nZ);
-                            pixelswritten++;
+                            if (bpict[nY][nX] < nZ) {
+                                bpict[nY][nX] = nZ;
+                                pict[nY][nX] = tcolor;
+                                pixelswritten++;
+                            }
                         }
                     }
                 }
@@ -1723,52 +1756,52 @@ void DoMyStuff(void)
                 // Rotations:
                 i = di - 4;
                 // Do twist?:
-                if (trees[treeinuse].usetwst)
+                if (useTwist)
                 {
-                    t = branches[treeinuse][i].twistc * dtz - branches[treeinuse][i].twists * dtx;
-                    dtx = branches[treeinuse][i].twistc * dtx + branches[treeinuse][i].twists * dtz;
+                    t = cachedBranchTransforms[i].twistc * dtz - cachedBranchTransforms[i].twists * dtx;
+                    dtx = cachedBranchTransforms[i].twistc * dtx + cachedBranchTransforms[i].twists * dtz;
                     dtz = t;
                 }
                 // Lean:
-                t = branches[treeinuse][i].leanc * dtx - branches[treeinuse][i].leans * dty;
-                dty = branches[treeinuse][i].leanc * dty + branches[treeinuse][i].leans * dtx;
+                t = cachedBranchTransforms[i].leanc * dtx - cachedBranchTransforms[i].leans * dty;
+                dty = cachedBranchTransforms[i].leanc * dty + cachedBranchTransforms[i].leans * dtx;
                 dtx = t;
                 // Rotate:
-                t = branches[treeinuse][i].rotatec * dtz - branches[treeinuse][i].rotates * dtx;
-                dtx = branches[treeinuse][i].rotatec * dtx + branches[treeinuse][i].rotates * dtz;
+                t = cachedBranchTransforms[i].rotatec * dtz - cachedBranchTransforms[i].rotates * dtx;
+                dtx = cachedBranchTransforms[i].rotatec * dtx + cachedBranchTransforms[i].rotates * dtz;
                 dtz = t;
 
                 // Scale!
                 // Global scale?
-                if (trees[treeinuse].glblscl)
+                if (useGlobalScale)
                 {
-                    dtx *= branches[treeinuse][0].scale;
-                    dty *= branches[treeinuse][0].scale;
-                    dtz *= branches[treeinuse][0].scale;
+                    dtx *= globalScale;
+                    dty *= globalScale;
+                    dtz *= globalScale;
                 }
                 // No!, all diffrent:
                 else
                 {
-                    dtx *= branches[treeinuse][i].scale;
-                    dty *= branches[treeinuse][i].scale;
-                    dtz *= branches[treeinuse][i].scale;
+                    dtx *= cachedBranchTransforms[i].scale;
+                    dty *= cachedBranchTransforms[i].scale;
+                    dtz *= cachedBranchTransforms[i].scale;
                 }
 
                 // Scale by heigth of branch?
-                if (trees[treeinuse].sctrnsl)
+                if (scaleByHeight)
                 {
-                    dtx *= branches[treeinuse][i].height;
-                    dty *= branches[treeinuse][i].height;
-                    dtz *= branches[treeinuse][i].height;
+                    dtx *= cachedBranchTransforms[i].height;
+                    dty *= cachedBranchTransforms[i].height;
+                    dtz *= cachedBranchTransforms[i].height;
                 }
 
                 // Translate!
                 // Use heights?
-                if (trees[treeinuse].usehig)
-                    dty += trees[treeinuse].height * branches[treeinuse][i].height;
+                if (useHeights)
+                    dty += treeHeight * cachedBranchTransforms[i].height;
                 // No!, all at top of stem:
                 else
-                    dty += trees[treeinuse].height;
+                    dty += treeHeight;
 
                 // Color!
                 dcr = ((dcr + tcr[di]) >> 1) & 0xFF;
@@ -1783,30 +1816,6 @@ void DoMyStuff(void)
     ybuf[ui] = dty;
     zbuf[ui] = dtz;
 
-    // Apply all batched pixels at once
-    if (!pixelBatch.empty()) {
-        std::sort(pixelBatch.begin(), pixelBatch.end(), 
-            [](const auto& a, const auto& b) {
-                return std::get<3>(a) > std::get<3>(b); // Sort by Z value (highest/closest first)
-            });
-            
-        // Apply all pixels
-        for (const auto& pixel : pixelBatch) {
-            int x = std::get<0>(pixel);
-            int y = std::get<1>(pixel);
-            uint32_t color = std::get<2>(pixel);
-            int z = std::get<3>(pixel);
-            
-            if (bpict[y][x] < z) {
-                bpict[y][x] = z;
-                pict[y][x] = color;
-            }
-        }
-    }
-
-    // Update screen only ONCE after processing all elements
-    showpic();
-    
     return;
 }
 
@@ -1845,10 +1854,10 @@ void IFSlight(void)
         nzt = lrxx * nzt + lrxy * nyt;
         nyt = temp;
 
-        // Light normal calculation
-        float x = dtx - ntx;
-        float y = dty - nty;
-        float z = dtz - ntz;
+        // Build the transformed normal vector from the transformed point pair.
+        float x = static_cast<float>(xt - nxt);
+        float y = static_cast<float>(yt - nyt);
+        float z = static_cast<float>(zt - nzt);
 
         float inv_length = Q_rsqrt(x*x + y*y + z*z);
         nzt -= (z * inv_length);
@@ -1856,7 +1865,7 @@ void IFSlight(void)
         
         // Luminosity calculation
         if ((logfoliage != USELOGS) && (lightness == 0))
-            t = ((2.0f * size_factor) + powf(nzt, 3.0f)) / 3.0f;
+            t = ((2.0f * size_factor) + (nzt * nzt * nzt)) / 3.0f;
         else
             t = size_factor * size_factor * nzt;
     }
@@ -1881,7 +1890,9 @@ void IFSlight(void)
     t *= 2.0f;
     luma_val = t - 1.0f;
     luma_val = (luma_val < 0.0f) ? 0.0f : luma_val;
-    luma = 1.0f + powf(luma_val, 8.0f);
+    float luma_sq = luma_val * luma_val;
+    float luma_pow4 = luma_sq * luma_sq;
+    luma = 1.0f + (luma_pow4 * luma_pow4);
     
     // Clamp t
     if (t > 1.0f) t = 1.0f;
@@ -2156,6 +2167,7 @@ void newsetup(void)
     dcg = tcg[4];
     dcb = tcb[4];
 
+    branchCacheDirty = true;
     newrender();
 
     return;
@@ -2200,6 +2212,7 @@ void randombranch(int indx)
     branches[31][indx].twistc = cos(angle);
     branches[31][indx].twists = sin(angle);
 
+    branchCacheDirty = true;
     return;
 } // randombranch.
 
@@ -2618,6 +2631,11 @@ void clearscreen(uint32_t RGBdata)
  * --------------------------------------------------------------------- */
 void showpic(void)
 {
+    if (INTERNAL_SCALE == 1) {
+        memcpy(pixelBuffer, pict, sizeof(pixelBuffer));
+        return;
+    }
+
     int x, y, xx, yy;
 
     for (y = 0; y < HEIGHT; y++)
